@@ -525,12 +525,6 @@
     </div>
 </div>
 
-<!-- ─── 準備金 ─── -->
-<div class="section">
-    <div class="section-title"><span>💰</span> 準備金</div>
-    <div class="reserve-grid" id="reserveGrid"></div>
-</div>
-
 <!-- ─── Footer ─── -->
 <div style="text-align:center;color:var(--dim);font-size:0.68rem;padding:12px 0 4px">
     每 5 分鐘自動更新 · 台股/美股報價: Yahoo Finance · 企業債手動輸入 · 僅供個人參考
@@ -770,7 +764,6 @@ function commitReserve(currency, raw) {
     const val = parseFloat(raw);
     reserveData[currency] = isNaN(val) || val < 0 ? 0 : val;
     saveReserve();
-    renderReserve();
     renderSummary();
 }
 
@@ -1091,6 +1084,36 @@ function renderSummary() {
             </div>
         </div>`;
 
+    const ntdR   = reserveData.NTD || 0;
+    const usdR   = reserveData.USD || 0;
+    const reserveCard = `
+        <div class="card card-loan" style="border-color:rgba(61,193,100,0.3)">
+            <div class="card-label">準備金 <small style="font-size:0.6rem;color:var(--dim);text-transform:none">（點數字編輯）</small></div>
+            <div class="loan-row">
+                <span class="loan-row-label">NTD</span>
+                <div class="loan-val-wrap">
+                    <span class="loan-amount" id="reserve-val-NTD"
+                          onclick="startEditReserve('NTD')"
+                          title="點擊編輯準備金台幣"
+                          style="color:var(--green)">
+                        ${ntdR ? wan(ntdR) : '—'}
+                    </span>
+                </div>
+            </div>
+            <div class="loan-row">
+                <span class="loan-row-label">USD</span>
+                <div class="loan-val-wrap">
+                    <span class="loan-amount" id="reserve-val-USD"
+                          onclick="startEditReserve('USD')"
+                          title="點擊編輯準備金美金"
+                          style="color:var(--green)">
+                        ${usdR ? '$' + usdR.toLocaleString() : '—'}
+                    </span>
+                </div>
+            </div>
+            <div class="loan-edit-hint">合計 ≈ ${wan(reserveNTD)} NTD</div>
+        </div>`;
+
     const rateCard = `
         <div class="card">
             <div class="card-label">USD / TWD</div>
@@ -1098,7 +1121,7 @@ function renderSummary() {
             <div class="card-sub">即時匯率</div>
         </div>`;
 
-    document.getElementById('summaryCards').innerHTML = staticCards + returnCard + loanCard + rateCard;
+    document.getElementById('summaryCards').innerHTML = staticCards + returnCard + loanCard + reserveCard + rateCard;
 }
 
 // ── Render Heatmap ────────────────────────────────────────────────────
@@ -1604,7 +1627,6 @@ function renderAll() {
     renderTwTable();
     renderUsTable();
     renderCorpBondTable();
-    renderReserve();
     document.getElementById('apiNotice').style.display = hasError ? 'block' : 'none';
     const now = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });
     document.getElementById('lastUpdate').textContent = `最後更新: ${now}`;
