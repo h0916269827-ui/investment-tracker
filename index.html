@@ -1781,7 +1781,16 @@ async function doRefresh(force = false) {
     try {
         const needFetch = force || !fetchAttempted || anyMarketMaybeOpen();
         if (needFetch) { fetchAttempted = true; await fetchAllQuotes(); }
-        renderAll();
+        // 新增表單開啟中：只更新卡片和熱力圖，不重建表格（避免清掉填到一半的表單）
+        if (twAddVisible || usAddVisible) {
+            renderSummary();
+            renderHeatmap();
+            document.getElementById('apiNotice').style.display = hasError ? 'block' : 'none';
+            const now = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });
+            document.getElementById('lastUpdate').textContent = `最後更新: ${now}`;
+        } else {
+            renderAll();
+        }
     } finally {
         loading = false;
         btn.disabled = false;
