@@ -515,7 +515,6 @@
                     <th>累計已收配息 USD<br><small style="font-weight:400;letter-spacing:0;color:var(--dim)">（次數×每期金額）</small></th>
                     <th><abbr title="資本損益 + 累計已收配息">含息總損益 USD</abbr></th>
                     <th>目前市值 USD</th>
-                    <th>市值 NTD</th>
                     <th>佔比</th>
                     <th><abbr title="含息總損益 ÷ 買入成本">含息損益%</abbr></th>
                 </tr>
@@ -1341,9 +1340,10 @@ function showAddTwRow() {
     const tbody = document.getElementById('twBody');
     const addRow = `<tr class="add-row" id="tw-add-row">
         <td>
-            <input class="add-row-input" id="tw-new-ticker" placeholder="股票代號，如 1815" style="width:110px"
-                   onkeydown="if(event.key==='Enter')document.getElementById('tw-new-lots').focus()">
-            <div style="font-size:0.6rem;color:var(--dim);margin-top:3px">名稱自動抓取</div>
+            <input class="add-row-input" id="tw-new-ticker" placeholder="代號，如 1815" style="width:100px"
+                   onblur="autoFillTwName(this.value)"
+                   onkeydown="if(event.key==='Enter'){autoFillTwName(this.value);setTimeout(()=>document.getElementById('tw-new-name')?.focus(),50)}">
+            <input class="add-row-input" id="tw-new-name" placeholder="名稱（自動填入）" style="width:100px;margin-top:4px">
         </td>
         <td><input class="add-row-input" id="tw-new-lots"  type="number" min="0" step="0.5" placeholder="張數"
                    onkeydown="if(event.key==='Enter')document.getElementById('tw-new-cost').focus()"></td>
@@ -1364,8 +1364,29 @@ function hideAddTwRow() {
     document.getElementById('tw-add-row')?.remove();
 }
 
+// 輸入代號後自動查名稱並填入
+async function autoFillTwName(raw) {
+    if (!raw.trim()) return;
+    const nameEl = document.getElementById('tw-new-name');
+    if (!nameEl || nameEl.value.trim()) return; // 已有輸入則不覆蓋
+    nameEl.placeholder = '查詢中…';
+    const code = raw.trim().toUpperCase();
+    let ticker = code.includes('.') ? code : code + '.TW';
+    let q = await fetchQuote(ticker);
+    if (!q && !code.includes('.')) {
+        q = await fetchQuote(code + '.TWO');
+    }
+    if (q?.shortName) {
+        nameEl.value = q.shortName;
+        nameEl.placeholder = '名稱';
+    } else {
+        nameEl.placeholder = '請手動輸入名稱';
+    }
+}
+
 async function confirmAddTw() {
     const raw  = document.getElementById('tw-new-ticker').value.trim().toUpperCase();
+    const nameInput = document.getElementById('tw-new-name').value.trim();
     const lots = parseFloat(document.getElementById('tw-new-lots').value);
     const cost = parseFloat(document.getElementById('tw-new-cost').value);
     if (!raw)  { alert('請輸入股票代號'); return; }
@@ -1375,7 +1396,6 @@ async function confirmAddTw() {
     const btn = document.getElementById('tw-add-btn');
     const status = document.getElementById('tw-add-status');
     if (btn) { btn.disabled = true; btn.textContent = '查詢中…'; }
-    if (status) status.textContent = '查詢 Yahoo Finance 中…';
 
     // 自動補後綴：優先 .TW（上市），查不到再試 .TWO（上櫃）
     let ticker = raw.includes('.') ? raw : raw + '.TW';
@@ -1386,18 +1406,13 @@ async function confirmAddTw() {
         q = await fetchQuote(ticker);
     }
 
-    let name;
-    if (q) {
-        name = q.shortName || ticker;   // 優先用 Yahoo 名稱，抓不到才用代號
-        QUOTES[ticker] = q;
-    } else {
-        name = ticker;                  // fetch 失敗：至少顯示代號（含 .TW），可點擊修改
-    }
+    // 名稱優先順序：手動輸入 > Yahoo shortName > ticker
+    const name = nameInput || q?.shortName || ticker;
+    if (q) QUOTES[ticker] = q;
 
     TW_DATA.push({ ticker, name, lots, cost });
     saveTwData();
     twAddVisible = false;
-    // 無論是否抓到，強制 refresh 一次確保收盤價載入
     doRefresh(true);
 }
 
@@ -1431,13 +1446,13 @@ function buildUsRow(h, idx, totalNTD) {
                    onchange="saveUsField(${idx},'cost',this.value)"
                    title="每股均成本（USD）">
         </td>
-        <td>${q ? '$' + fmtP(q.price) : (fetchAttempted ? '<span class="neu">—</span>' : '<span class="shimmer"></span>')}</td>
+        <td>${q ? `$${fmtP(q.price)}<div class="tbl-sub">≈ ${wan(q.price * USD_TWD)}</div>` : (fetchAttempted ? '<span class="neu">—</span>' : '<span class="shimmer"></span>')}</td>
         <td class="${cc(q?.changePct)}">${q ? fmt(q.changePct, 2) + '%' : '—'}</td>
-        <td class="${cc(daily)}">${q ? fmt(daily, 2, '$') : '—'}</td>
-        <td class="${cc(unreal)}">${fmt(unreal, 2, '$')}</td>
+        <td class="${cc(daily)}">${q ? `${fmt(daily, 2, '$')}<div class="tbl-sub">${fmt(daily * USD_TWD, 0, '$')} NTD</div>` : '—'}</td>
+        <td class="${cc(unreal)}">${fmt(unreal, 2, '$')}<div class="tbl-sub">${fmt(unreal * USD_TWD, 0, '$')} NTD</div></td>
         <td>${wan(val * USD_TWD)}</td>
         <td>${wt.toFixed(1)}%</td>
-        <td class="${cc(pnlPct)}" style="font-weight:700">${fmt(pnlPct, 2)}%</td>
+        <td class="${cc(pnlPct)}" style="font-weight:700">${fmt(pnlPct, 2)}%<div class="tbl-sub" style="font-weight:400">${fmt(unreal * USD_TWD, 0, '$')} NTD</div></td>
         <td class="td-op"><button class="btn-del" onclick="deleteUsRow(${idx})" title="刪除此持股">×</button></td>
     </tr>`;
 }
@@ -1460,11 +1475,11 @@ function renderUsTable() {
     const totPnlPct = totCostUSD > 0 ? totUnrUSD / totCostUSD * 100 : 0;
     rows += `<tr class="tbl-total">
         <td colspan="5">合計</td>
-        <td class="${cc(totDayUSD)}">${fmt(totDayUSD, 2, '$')}</td>
-        <td class="${cc(totUnrUSD)}">${fmt(totUnrUSD, 2, '$')}</td>
+        <td class="${cc(totDayUSD)}">${fmt(totDayUSD, 2, '$')}<div class="tbl-sub">${fmt(totDayUSD * USD_TWD, 0, '$')} NTD</div></td>
+        <td class="${cc(totUnrUSD)}">${fmt(totUnrUSD, 2, '$')}<div class="tbl-sub">${fmt(totUnrUSD * USD_TWD, 0, '$')} NTD</div></td>
         <td>${wan(totValUSD * USD_TWD)}</td>
         <td>${(totalNTD > 0 ? totValUSD * USD_TWD / totalNTD * 100 : 0).toFixed(1)}%</td>
-        <td class="${cc(totPnlPct)}" style="font-weight:700">${fmt(totPnlPct, 2)}%</td>
+        <td class="${cc(totPnlPct)}" style="font-weight:700">${fmt(totPnlPct, 2)}%<div class="tbl-sub" style="font-weight:400">${fmt(totUnrUSD * USD_TWD, 0, '$')} NTD</div></td>
         <td></td>
     </tr>`;
 
@@ -1603,12 +1618,11 @@ function renderCorpBondTable() {
                 <div class="tbl-sub" style="margin-top:2px">×$${fmtP(perPeriod,0)}</div>
                 ${couponMonthHint(b)}
             </td>
-            <td class="pos">+$${fmtP(recvInt, 0)}</td>
-            <td class="${cc(totalPnL)}">${fmt(totalPnL, 0, '$')}</td>
-            <td>$${fmtP(mv, 0)}</td>
-            <td>${wan(mvNTD)}</td>
+            <td class="pos">+$${fmtP(recvInt, 0)}<div class="tbl-sub">≈ ${fmt(recvInt * USD_TWD, 0, '$')} NTD</div></td>
+            <td class="${cc(totalPnL)}">${fmt(totalPnL, 0, '$')}<div class="tbl-sub">≈ ${fmt(totalPnL * USD_TWD, 0, '$')} NTD</div></td>
+            <td>$${fmtP(mv, 0)}<div class="tbl-sub">≈ ${wan(mvNTD)}</div></td>
             <td>${wt.toFixed(1)}%</td>
-            <td class="${cc(totalPnL)}" style="font-weight:700">${costUSD > 0 ? fmt(totalPnL / costUSD * 100, 2) + '%' : '—'}</td>
+            <td class="${cc(totalPnL)}" style="font-weight:700">${costUSD > 0 ? fmt(totalPnL / costUSD * 100, 2) + '%' : '—'}<div class="tbl-sub" style="font-weight:400">${fmt(totalPnL * USD_TWD, 0, '$')} NTD</div></td>
         </tr>`;
     });
 
@@ -1621,12 +1635,11 @@ function renderCorpBondTable() {
         <td>—</td>
         <td class="${cc(totCapPnL)}">${fmt(totCapPnL, 0, '$')}</td>
         <td>—</td>
-        <td class="pos">+$${fmtP(totRecvInt, 0)}</td>
-        <td class="${cc(totTotalPnL)}">${fmt(totTotalPnL, 0, '$')}</td>
-        <td>$${fmtP(totMV, 0)}</td>
-        <td>${wan(totMV * USD_TWD)}</td>
+        <td class="pos">+$${fmtP(totRecvInt, 0)}<div class="tbl-sub">≈ ${fmt(totRecvInt * USD_TWD, 0, '$')} NTD</div></td>
+        <td class="${cc(totTotalPnL)}">${fmt(totTotalPnL, 0, '$')}<div class="tbl-sub">≈ ${fmt(totTotalPnL * USD_TWD, 0, '$')} NTD</div></td>
+        <td>$${fmtP(totMV, 0)}<div class="tbl-sub">≈ ${wan(totMV * USD_TWD)}</div></td>
         <td>${(totalNTD > 0 ? totMV * USD_TWD / totalNTD * 100 : 0).toFixed(1)}%</td>
-        <td class="${cc(totTotalPnL)}" style="font-weight:700">${totCostUSD > 0 ? fmt(totTotalPnL / totCostUSD * 100, 2) + '%' : '—'}</td>
+        <td class="${cc(totTotalPnL)}" style="font-weight:700">${totCostUSD > 0 ? fmt(totTotalPnL / totCostUSD * 100, 2) + '%' : '—'}<div class="tbl-sub" style="font-weight:400">${fmt(totTotalPnL * USD_TWD, 0, '$')} NTD</div></td>
     </tr>`;
 
     document.getElementById('corpBondBody').innerHTML = rows;
