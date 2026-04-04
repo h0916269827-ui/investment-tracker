@@ -1,0 +1,1590 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>投資損益追蹤</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --surface2: #1f2937;
+            --border: #30363d;
+            --text: #e6edf3;
+            --dim: #7d8590;
+            --green: #3fb950;
+            --red: #f85149;
+            --yellow: #d29922;
+            --accent: #58a6ff;
+            --radius: 10px;
+            --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'PingFang TC', 'Noto Sans TC', sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 16px;
+            font-size: 14px;
+        }
+
+        /* ── Header ── */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .header h1 { font-size: 1.25rem; color: var(--accent); font-weight: 700; }
+        .header-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .last-update { font-size: 0.72rem; color: var(--dim); }
+        .btn {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.78rem;
+            transition: background 0.15s;
+        }
+        .btn:hover { background: var(--border); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── Cards ── */
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px 14px 12px;
+        }
+        .card-label {
+            font-size: 0.68rem;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 6px;
+        }
+        .card-val { font-size: 1.2rem; font-weight: 700; line-height: 1.2; }
+        .card-sub { font-size: 0.72rem; color: var(--dim); margin-top: 5px; }
+
+        /* ── Colors ── */
+        .pos { color: var(--green); }
+        .neg { color: var(--red); }
+        .neu { color: var(--dim); }
+
+        /* ── Section ── */
+        .section { margin-bottom: 18px; }
+        .section-title {
+            font-size: 0.72rem;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .section-title span { color: var(--text); font-size: 0.95rem; }
+
+        /* ── Heatmap ── */
+        .heatmap-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px;
+        }
+        .heatmap { display: flex; flex-wrap: wrap; gap: 4px; }
+        .hm-cell {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            padding: 6px 4px;
+            cursor: default;
+            overflow: hidden;
+            transition: filter 0.15s;
+            min-width: 55px;
+            min-height: 55px;
+        }
+        .hm-cell:hover { filter: brightness(1.15); }
+        .hm-cell .hm-name { font-size: 0.72rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; text-align: center; }
+        .hm-cell .hm-chg  { font-size: 0.65rem; margin-top: 3px; }
+        .hm-cell .hm-wt   { font-size: 0.6rem; opacity: 0.75; margin-top: 1px; }
+
+        /* ── Table ── */
+        .tbl-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            background: var(--surface2);
+            color: var(--dim);
+            font-weight: 600;
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 10px 12px;
+            text-align: right;
+            white-space: nowrap;
+        }
+        th:first-child { text-align: left; }
+        td {
+            padding: 10px 12px;
+            text-align: right;
+            border-top: 1px solid var(--border);
+            white-space: nowrap;
+            font-size: 0.82rem;
+        }
+        td:first-child { text-align: left; }
+        tr:hover td { background: rgba(255,255,255,0.02); }
+        .tbl-name { font-weight: 600; font-size: 0.85rem; }
+        .tbl-sub  { font-size: 0.68rem; color: var(--dim); margin-top: 2px; }
+        .tbl-total td { background: var(--surface2); font-weight: 700; border-top: 2px solid var(--border); }
+
+        /* ── Badge ── */
+        .badge {
+            display: inline-block;
+            font-size: 0.58rem;
+            padding: 1px 5px;
+            border-radius: 8px;
+            vertical-align: middle;
+            margin-left: 4px;
+        }
+        .badge-open   { background: rgba(63,185,80,0.15); color: var(--green); }
+        .badge-closed { background: rgba(125,133,144,0.15); color: var(--dim); }
+        .badge-pre    { background: rgba(210,153,34,0.15); color: var(--yellow); }
+        .badge-post   { background: rgba(88,166,255,0.15); color: var(--accent); }
+
+        /* ── Corp bond price input ── */
+        .price-input {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 4px 8px;
+            border-radius: 5px;
+            font-size: 0.82rem;
+            width: 80px;
+            text-align: right;
+            font-family: var(--font);
+        }
+        .price-input:focus { outline: none; border-color: var(--accent); }
+
+        /* ── Reserve ── */
+        .reserve-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 10px;
+        }
+
+        /* ── Loading shimmer ── */
+        .shimmer {
+            display: inline-block;
+            width: 64px;
+            height: 13px;
+            border-radius: 4px;
+            background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
+            background-size: 200%;
+            animation: shimmer 1.4s infinite;
+            vertical-align: middle;
+        }
+        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+        /* ── Notice banner ── */
+        .notice {
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 0.78rem;
+            margin-bottom: 14px;
+            display: none;
+        }
+        .notice-warn { background: rgba(210,153,34,0.1); border: 1px solid rgba(210,153,34,0.3); color: var(--yellow); }
+        .notice-info { background: rgba(88,166,255,0.1); border: 1px solid rgba(88,166,255,0.3); color: var(--accent); display: block; }
+
+        abbr { text-decoration: underline dotted; cursor: help; }
+
+        /* ── Overall return card ── */
+        .card-return { cursor: default; border-color: rgba(88,166,255,0.35); }
+        .initcap-amount {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--accent);
+            cursor: pointer;
+            border-bottom: 1px dashed transparent;
+            transition: border-color 0.15s;
+        }
+        .initcap-amount:hover { border-color: var(--accent); }
+        .initcap-edit-input {
+            background: var(--surface2);
+            border: 1px solid var(--accent);
+            color: var(--text);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 0.82rem;
+            width: 100%;
+            outline: none;
+        }
+
+        /* ── Editable loan card ── */
+        .card-loan { cursor: default; border-color: rgba(248,81,73,0.3); }
+        .loan-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 6px;
+            gap: 6px;
+        }
+        .loan-row-label { font-size: 0.68rem; color: var(--dim); white-space: nowrap; }
+        .loan-val-wrap {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .loan-amount {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--red);
+            cursor: pointer;
+            border-bottom: 1px dashed rgba(248,81,73,0.4);
+            min-width: 60px;
+            text-align: right;
+        }
+        .loan-amount:hover { border-color: var(--red); }
+        .loan-edit-input {
+            background: var(--surface2);
+            border: 1px solid var(--red);
+            color: var(--text);
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 0.88rem;
+            font-weight: 700;
+            width: 110px;
+            text-align: right;
+            font-family: var(--font);
+            outline: none;
+        }
+        .loan-edit-hint {
+            font-size: 0.6rem;
+            color: var(--dim);
+            margin-top: 4px;
+        }
+
+        /* ── Editable table inputs ── */
+        .tbl-input {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 4px 6px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            width: 78px;
+            text-align: right;
+            font-family: var(--font);
+            outline: none;
+        }
+        .tbl-input:focus { border-color: var(--accent); }
+        .tbl-input-wide { width: 100px; }
+
+        /* ── Row action buttons ── */
+        .btn-del {
+            background: rgba(248,81,73,0.08);
+            border: 1px solid rgba(248,81,73,0.2);
+            color: var(--red);
+            width: 24px; height: 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            padding: 0;
+        }
+        .btn-del:hover { background: rgba(248,81,73,0.2); }
+        .btn-add-row {
+            background: rgba(63,185,80,0.08);
+            border: 1px solid rgba(63,185,80,0.25);
+            color: var(--green);
+            padding: 5px 13px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.76rem;
+            margin-left: auto;
+        }
+        .btn-add-row:hover { background: rgba(63,185,80,0.18); }
+        .add-row td { background: rgba(63,185,80,0.04) !important; }
+        .add-row-input {
+            background: var(--surface2);
+            border: 1px solid rgba(63,185,80,0.35);
+            color: var(--text);
+            padding: 5px 7px;
+            border-radius: 5px;
+            font-size: 0.78rem;
+            width: 100%;
+            font-family: var(--font);
+            outline: none;
+            min-width: 60px;
+        }
+        .add-row-input:focus { border-color: var(--green); }
+        .btn-confirm {
+            background: rgba(63,185,80,0.15);
+            border: 1px solid rgba(63,185,80,0.4);
+            color: var(--green);
+            padding: 4px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.76rem;
+            white-space: nowrap;
+        }
+        .btn-cancel {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--dim);
+            padding: 4px 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.76rem;
+        }
+        th.th-op { width: 32px; }
+        td.td-op { text-align: center; }
+
+        /* ── Coupon badge ── */
+        .coupon-tag {
+            font-size: 0.62rem;
+            background: rgba(88,166,255,0.15);
+            color: var(--accent);
+            padding: 1px 6px;
+            border-radius: 6px;
+            margin-left: 4px;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 480px) {
+            body { padding: 10px; }
+            .cards { grid-template-columns: repeat(2, 1fr); }
+            .card-val { font-size: 1rem; }
+            th, td { padding: 8px 8px; font-size: 0.74rem; }
+        }
+        @media (min-width: 1200px) {
+            body { max-width: 1440px; margin: 0 auto; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ─── Header ─── -->
+<div class="header">
+    <h1>📊 投資損益追蹤</h1>
+    <div class="header-right">
+        <span class="last-update" id="lastUpdate">載入中...</span>
+        <button class="btn" onclick="exportSettings()" title="匯出所有設定為 JSON 檔，可備份或在其他裝置匯入">📤 匯出</button>
+        <button class="btn" onclick="importSettings()" title="從 JSON 檔匯入設定（覆蓋目前資料）">📥 匯入</button>
+        <button class="btn" id="refreshBtn" onclick="doRefresh()">↻ 立即更新</button>
+    </div>
+</div>
+
+<!-- ─── Notices ─── -->
+<div class="notice notice-warn" id="apiNotice">
+    ⚠ 部分報價無法取得（市場休市或 API 限制），顯示最後快取資料。
+</div>
+<div class="notice notice-info" id="corpBondNotice">
+    📌 企業債券（JPM / STANLN / UBS）為 OTC 場外交易，請手動輸入目前價格（以 par 的 % 表示，例如 99.50）。價格已自動儲存於本機瀏覽器。
+</div>
+
+<!-- ─── Summary Cards ─── -->
+<div class="cards" id="summaryCards">
+    <div class="card"><div class="card-label">總市值</div><div class="card-val"><span class="shimmer"></span></div></div>
+    <div class="card"><div class="card-label">今日損益</div><div class="card-val"><span class="shimmer"></span></div></div>
+    <div class="card"><div class="card-label">未實現損益</div><div class="card-val"><span class="shimmer"></span></div></div>
+    <div class="card"><div class="card-label">含準備金總資產</div><div class="card-val"><span class="shimmer"></span></div></div>
+    <div class="card"><div class="card-label">USD/TWD</div><div class="card-val"><span class="shimmer"></span></div></div>
+</div>
+
+<!-- ─── Heatmap ─── -->
+<div class="section">
+    <div class="section-title">
+        <span>🗺</span> 持股熱力圖
+        <small style="font-size:0.65rem;color:var(--dim)">格子大小 = 市值比例 ／ 顏色 = 今日漲跌</small>
+    </div>
+    <div class="heatmap-wrap">
+        <div class="heatmap" id="heatmap">
+            <span class="shimmer" style="width:100%;height:80px;border-radius:6px;display:block"></span>
+        </div>
+    </div>
+</div>
+
+<!-- ─── 台股 ─── -->
+<div class="section">
+    <div class="section-title" style="justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span>🇹🇼</span> 台股
+            <small style="font-size:0.65rem;color:var(--dim)">手續費六折 ｜ 賣出 +證交稅 0.3% ｜ 張數/均成本可直接修改</small>
+        </div>
+        <button class="btn-add-row" onclick="showAddTwRow()">＋ 新增股票</button>
+    </div>
+    <div class="tbl-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>名稱 / 代號</th>
+                    <th>張數</th>
+                    <th>均成本/股</th>
+                    <th>現價</th>
+                    <th>今日漲跌%</th>
+                    <th>今日損益 NTD</th>
+                    <th>未實現損益 NTD</th>
+                    <th><abbr title="假設今天全部賣出：扣手續費(六折)+證交稅0.3%後損益">稅後損益(賣)</abbr></th>
+                    <th>佔比</th>
+                    <th><abbr title="(目前市值 − 含費成本) ÷ 含費成本">損益%</abbr></th>
+                    <th class="th-op"></th>
+                </tr>
+            </thead>
+            <tbody id="twBody">
+                <tr><td colspan="11" style="text-align:center;padding:24px;color:var(--dim)"><span class="shimmer"></span></td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ─── 美股 ─── -->
+<div class="section">
+    <div class="section-title" style="justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span>🇺🇸</span> 美股
+            <small style="font-size:0.65rem;color:var(--dim)">股數/均成本可直接修改</small>
+        </div>
+        <button class="btn-add-row" onclick="showAddUsRow()">＋ 新增股票</button>
+    </div>
+    <div class="tbl-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>名稱 / 代號</th>
+                    <th>股數</th>
+                    <th>均成本 USD</th>
+                    <th>現價 USD</th>
+                    <th>今日漲跌%</th>
+                    <th>今日損益 USD</th>
+                    <th>未實現損益 USD</th>
+                    <th>市值 NTD</th>
+                    <th>佔比</th>
+                    <th><abbr title="(目前市值 − 均成本) ÷ 均成本">損益%</abbr></th>
+                    <th class="th-op"></th>
+                </tr>
+            </thead>
+            <tbody id="usBody">
+                <tr><td colspan="11" style="text-align:center;padding:24px;color:var(--dim)"><span class="shimmer"></span></td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ─── 企業債券 OTC ─── -->
+<div class="section">
+    <div class="section-title">
+        <span>🏦</span> 企業債券（OTC）
+        <small style="font-size:0.65rem;color:var(--dim)">手動輸入報價（% of par）｜ 含應計利息估算</small>
+    </div>
+    <div class="tbl-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>債券 / ISIN</th>
+                    <th>買入成本 USD</th>
+                    <th>買入均價%</th>
+                    <th>目前市價%<br><small style="font-weight:400;letter-spacing:0">(可修改)</small></th>
+                    <th>資本損益 USD</th>
+                    <th><abbr title="每半年付息一次，點 ▲▼ 或直接輸入次數">配息次數</abbr></th>
+                    <th>累計已收配息 USD<br><small style="font-weight:400;letter-spacing:0;color:var(--dim)">（次數×每期金額）</small></th>
+                    <th><abbr title="資本損益 + 累計已收配息">含息總損益 USD</abbr></th>
+                    <th>目前市值 USD</th>
+                    <th>市值 NTD</th>
+                    <th>佔比</th>
+                    <th><abbr title="含息總損益 ÷ 買入成本">含息損益%</abbr></th>
+                </tr>
+            </thead>
+            <tbody id="corpBondBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ─── 準備金 ─── -->
+<div class="section">
+    <div class="section-title"><span>💰</span> 準備金</div>
+    <div class="reserve-grid" id="reserveGrid"></div>
+</div>
+
+<!-- ─── Footer ─── -->
+<div style="text-align:center;color:var(--dim);font-size:0.68rem;padding:12px 0 4px">
+    每 5 分鐘自動更新 · 台股/美股報價: Yahoo Finance · 企業債手動輸入 · 僅供個人參考
+</div>
+
+<script>
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║  ★ 請修改以下設定區 ★                                                ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
+const CFG = {
+
+    // ── 台股手續費設定 ────────────────────────────────────────────────
+    tw_fee_rate    : 0.001425,  // 手續費率 0.1425%
+    tw_fee_discount: 0.6,       // 手續費折扣 (六折 = 0.6)
+    tw_tx_tax      : 0.003,     // 賣出證交稅 0.3%（一般股票）
+
+    // ── 台股持股 ──────────────────────────────────────────────────────
+    // ticker : Yahoo Finance 代號（上市 + ".TW"，上櫃 + ".TWO"）
+    // lots   : 持有張數（1張 = 1000股）
+    // cost   : 平均買入成本（每股純價格，不含手續費，系統自動加計）
+    tw: [
+        { ticker: "3231.TW", name: "緯創", lots: 220, cost: 127.5 },
+        // { ticker: "2330.TW", name: "台積電", lots: 1, cost: 900 },  ← 範例
+    ],
+
+    // ── 美股持股 ──────────────────────────────────────────────────────
+    us: [
+        {
+            ticker : "BLSH",
+            name   : "Bullish",
+            shares : 2735,
+            cost   : 60.074548,   // 成交均價 USD（國泰證券）
+        },
+    ],
+
+    // ── 企業債券（OTC，手動報價）─────────────────────────────────────
+    // isin      : 國際證券識別碼
+    // issuer    : 發行機構
+    // label     : 顯示名稱（含票息率與到期日）
+    // coupon    : 年票息率（%）
+    // maturity  : 到期日 "YYYY-MM-DD"
+    // faceValue : 每張面額（USD），機構債通常 $1,000
+    // quantity  : 持有張數  ← ★ 請填入實際數量
+    // cost      : 買入均價（% of par，例: 100.00 = 面額，98.50 = 折價）← ★ 請填入
+    corp_bonds: [
+        {
+            isin        : "US46647PDY97",
+            issuer      : "JPMorgan Chase",
+            label       : "JPM 6.254% 10/23/34",
+            coupon      : 6.254,
+            maturity    : "2034-10-23",
+            faceValue   : 200000,   // USD 面額
+            quantity    : 1,
+            cost        : 108.80,   // 買入均價 217,600 ÷ 200,000
+            costUSD     : 217600,   // 實際買入成本 USD（含費用）
+            currentPrice: 107.66,   // 參考市價 % of par（國泰 2026/04/02）← 可更新
+            couponCount : 3,        // 已收到幾次配息（半年一次），可在頁面直接調整
+            couponMonths: [4, 10],  // 每年配息月份
+            pledged     : true,     // 已設質，無法賣出
+        },
+        {
+            isin        : "USG84228GC69",
+            issuer      : "Standard Chartered",
+            label       : "STANLN 6.097% 01/11/35",
+            coupon      : 6.097,
+            maturity    : "2035-01-11",
+            faceValue   : 200000,
+            quantity    : 1,
+            cost        : 102.30,   // 買入均價 204,600 ÷ 200,000
+            costUSD     : 204600,
+            currentPrice: 104.38,   // 參考市價 % of par（國泰 2026/04/02）← 可更新
+            couponCount : 4,        // 已收到幾次配息（半年一次）
+            couponMonths: [1, 7],   // 每年配息月份
+            pledged     : true,
+        },
+        {
+            isin        : "USH42097EQ69",
+            issuer      : "UBS",
+            label       : "UBS 6.301% 09/22/34",
+            coupon      : 6.301,
+            maturity    : "2034-09-22",
+            faceValue   : 200000,
+            quantity    : 1,
+            cost        : 110.30,   // 買入均價 220,600 ÷ 200,000
+            costUSD     : 220600,
+            currentPrice: 106.51,   // 參考市價 % of par（國泰 2026/04/02）← 可更新
+            couponCount : 4,        // 已收到幾次配息（半年一次）
+            couponMonths: [3, 9],   // 每年配息月份
+            pledged     : true,
+        },
+    ],
+
+    // ── 準備金 ────────────────────────────────────────────────────────
+    reserve: {
+        NTD: 0,     // 新台幣  ← ★ 請填入
+        USD: 0,     // 美金    ← ★ 請填入
+    },
+
+    // ── 備用匯率（API 無法取得時使用）──────────────────────────────
+    usd_twd_fallback: 32.5,
+};
+
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║  程式邏輯區（通常不需修改）                                           ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
+let QUOTES  = {};
+let USD_TWD = CFG.usd_twd_fallback;
+let loading = false;
+let hasError = false;
+
+// 企業債手動報價：從 localStorage 讀取，key = ISIN，value = % of par
+const CORP_PRICES_KEY = 'corp_bond_prices_v1';
+let corpPrices = {};
+try {
+    corpPrices = JSON.parse(localStorage.getItem(CORP_PRICES_KEY) || '{}');
+} catch(_) {}
+
+function saveCorpPrices() {
+    localStorage.setItem(CORP_PRICES_KEY, JSON.stringify(corpPrices));
+}
+
+// 企業債配息次數：key = ISIN，value = 已收次數（整數）
+const CORP_COUNTS_KEY = 'corp_coupon_counts_v1';
+let corpCouponCounts = {};
+try {
+    corpCouponCounts = JSON.parse(localStorage.getItem(CORP_COUNTS_KEY) || '{}');
+} catch(_) {}
+function saveCorpCounts() {
+    localStorage.setItem(CORP_COUNTS_KEY, JSON.stringify(corpCouponCounts));
+}
+
+// 每期配息金額（半年付息一次）
+function couponPerPeriod(b) {
+    return (b.coupon / 100 / 2) * b.faceValue * b.quantity;
+}
+
+// 配息月份提醒 HTML（本月 / 下月 / 一般）
+function couponMonthHint(b) {
+    const months = b.couponMonths;
+    if (!months?.length) return '';
+
+    const now       = new Date();
+    const thisMonth = now.getMonth() + 1;          // 1-12
+    const nextMonth = thisMonth === 12 ? 1 : thisMonth + 1;
+    const monthStr  = months.map(m => m + '月').join('、');
+
+    if (months.includes(thisMonth)) {
+        return `<div style="color:var(--yellow);font-size:0.67rem;font-weight:700;margin-top:4px;letter-spacing:0.02em">
+                    🔔 本月配息！
+                </div>
+                <div style="color:var(--dim);font-size:0.6rem;margin-top:1px">${monthStr}</div>`;
+    }
+    if (months.includes(nextMonth)) {
+        return `<div style="color:var(--accent);font-size:0.67rem;font-weight:600;margin-top:4px">
+                    📅 下月配息
+                </div>
+                <div style="color:var(--dim);font-size:0.6rem;margin-top:1px">${monthStr}</div>`;
+    }
+    // 計算距離下次配息幾個月
+    const diffs = months.map(m => {
+        let d = m - thisMonth;
+        if (d <= 0) d += 12;
+        return d;
+    });
+    const nearest = Math.min(...diffs);
+    const nextCouponMonth = months.find(m => {
+        let d = m - thisMonth;
+        if (d <= 0) d += 12;
+        return d === nearest;
+    });
+    return `<div style="color:var(--dim);font-size:0.62rem;margin-top:4px">配息月：${monthStr}</div>
+            <div style="color:var(--dim);font-size:0.6rem;margin-top:1px">距 ${nextCouponMonth}月 還有 ${nearest} 個月</div>`;
+}
+
+// 累計已收配息（由次數計算）
+function corpBondReceivedInt(b) {
+    const count = corpCouponCounts[b.isin] ?? b.couponCount ?? 0;
+    return count * couponPerPeriod(b);
+}
+
+function getCouponCount(b) {
+    return corpCouponCounts[b.isin] ?? b.couponCount ?? 0;
+}
+
+// 台股持倉（可動態增刪改，存 localStorage）
+const TW_KEY = 'tw_holdings_v1';
+let TW_DATA = (() => {
+    try {
+        const s = localStorage.getItem(TW_KEY);
+        if (s) return JSON.parse(s);
+    } catch(_) {}
+    return JSON.parse(JSON.stringify(CFG.tw));  // deep copy of defaults
+})();
+function saveTwData() { localStorage.setItem(TW_KEY, JSON.stringify(TW_DATA)); }
+
+// 美股持倉（可動態增刪改，存 localStorage）
+const US_KEY = 'us_holdings_v1';
+let US_DATA = (() => {
+    try {
+        const s = localStorage.getItem(US_KEY);
+        if (s) return JSON.parse(s);
+    } catch(_) {}
+    return JSON.parse(JSON.stringify(CFG.us));
+})();
+function saveUsData() { localStorage.setItem(US_KEY, JSON.stringify(US_DATA)); }
+
+// 原始資金（手動輸入，用於計算整體損益%）
+const INIT_CAP_KEY = 'initial_capital_v1';
+let initialCapital = 0;
+try { initialCapital = parseFloat(localStorage.getItem(INIT_CAP_KEY) || '0') || 0; } catch(_) {}
+function saveInitialCapital() { localStorage.setItem(INIT_CAP_KEY, String(initialCapital)); }
+
+// 借款記錄：僅供個人參考，不影響損益計算
+const LOAN_KEY = 'loan_record_v1';
+let loanData = { NTD: 0, USD: 0 };
+try {
+    loanData = JSON.parse(localStorage.getItem(LOAN_KEY) || '{"NTD":0,"USD":0}');
+} catch(_) {}
+
+function saveLoan() {
+    localStorage.setItem(LOAN_KEY, JSON.stringify(loanData));
+}
+
+// 點擊借款金額 → 切換為 input 編輯模式
+function startEditLoan(currency) {
+    const el = document.getElementById(`loan-val-${currency}`);
+    const cur = loanData[currency] || 0;
+    el.outerHTML = `<input class="loan-edit-input" id="loan-input-${currency}"
+        type="number" min="0" value="${cur}"
+        onblur="commitLoan('${currency}',this.value)"
+        onkeydown="if(event.key==='Enter')this.blur()"
+        autofocus>`;
+    // 延一幀再 focus 避免 Safari 問題
+    setTimeout(() => document.getElementById(`loan-input-${currency}`)?.select(), 30);
+}
+
+function commitLoan(currency, raw) {
+    const val = parseFloat(raw);
+    loanData[currency] = isNaN(val) || val < 0 ? 0 : val;
+    saveLoan();
+    renderSummary();   // 重繪 summary（含借款卡）
+}
+
+// 點擊原始資金 → 切換為 input 編輯模式
+function startEditInitCap() {
+    const el = document.getElementById('initcap-val');
+    if (!el) return;
+    el.outerHTML = `<input class="initcap-edit-input" id="initcap-input"
+        type="number" min="0" value="${initialCapital}"
+        onblur="commitInitCap(this.value)"
+        onkeydown="if(event.key==='Enter')this.blur()"
+        autofocus>`;
+    setTimeout(() => document.getElementById('initcap-input')?.select(), 30);
+}
+
+function commitInitCap(raw) {
+    const val = parseFloat(raw);
+    initialCapital = isNaN(val) || val < 0 ? 0 : val;
+    saveInitialCapital();
+    renderSummary();
+}
+
+// ── Utility ───────────────────────────────────────────────────────────
+
+function cc(n) {
+    if (n == null || isNaN(n)) return 'neu';
+    return n > 0 ? 'pos' : n < 0 ? 'neg' : 'neu';
+}
+
+function fmt(n, dec = 0, cur = '') {
+    if (n == null || isNaN(n)) return '—';
+    const abs  = Math.abs(n).toLocaleString('zh-TW', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    const sign = n > 0 ? '+' : n < 0 ? '-' : '';
+    return `${sign}${cur}${abs}`;
+}
+
+function fmtP(n, dec = 2) {
+    if (n == null || isNaN(n)) return '—';
+    return n.toLocaleString('zh-TW', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+function wan(n) {
+    if (isNaN(n)) return '—';
+    if (Math.abs(n) >= 10000) return (n / 10000).toFixed(1) + '萬';
+    return n.toFixed(0);
+}
+
+function marketBadge(state) {
+    if (!state) return '';
+    const map = { REGULAR:'open', PRE:'pre', POST:'post', POSTPOST:'post', CLOSED:'closed', PREPRE:'pre' };
+    const cls = map[state] || 'closed';
+    const lbl = { open:'開盤', pre:'盤前', post:'盤後', closed:'休市' }[cls];
+    return `<span class="badge badge-${cls}">${lbl}</span>`;
+}
+
+// ── Heatmap color scale ───────────────────────────────────────────────
+
+function hmColor(pct) {
+    if (pct >=  6) return ['#003d1a', '#00e676'];
+    if (pct >=  4) return ['#1b5e20', '#4caf50'];
+    if (pct >=  2) return ['#2e7d32', '#81c784'];
+    if (pct >=  0.5) return ['#388e3c', '#a5d6a7'];
+    if (pct > -0.5) return ['#263238', '#90a4ae'];
+    if (pct > -2) return ['#7f1d1d', '#ef9a9a'];
+    if (pct > -4) return ['#991b1b', '#f87171'];
+    if (pct > -6) return ['#b91c1c', '#fc8181'];
+    return ['#7f0000', '#ff5252'];
+}
+
+// ── Fee & Tax ─────────────────────────────────────────────────────────
+
+function twBuyCostTotal(costPerShare, shares) {
+    const fee = CFG.tw_fee_rate * CFG.tw_fee_discount;
+    return costPerShare * shares * (1 + fee);
+}
+
+function twSellNetTotal(price, shares) {
+    const fee = CFG.tw_fee_rate * CFG.tw_fee_discount;
+    return price * shares * (1 - fee - CFG.tw_tx_tax);
+}
+
+function twAfterTaxPnL(h, price) {
+    const shares = h.lots * 1000;
+    return twSellNetTotal(price, shares) - twBuyCostTotal(h.cost, shares);
+}
+
+// ── Corp bond helpers ─────────────────────────────────────────────────
+
+function corpBondFaceTotal(b) {
+    return b.faceValue * b.quantity;
+}
+
+// 優先用 localStorage，其次用 config 內的 currentPrice，最後 fallback 到 cost
+function corpBondCurrentPrice(b) {
+    return corpPrices[b.isin] ?? b.currentPrice ?? b.cost;
+}
+
+function corpBondMarketValue(b) {
+    return corpBondCurrentPrice(b) / 100 * corpBondFaceTotal(b);
+}
+
+// 使用實際成本金額（若有 costUSD 欄位則直接使用，否則由 cost% 換算）
+function corpBondCostValue(b) {
+    return b.costUSD ?? (b.cost / 100 * corpBondFaceTotal(b));
+}
+
+// 到期剩餘天數
+function daysToMaturity(maturity) {
+    const diff = new Date(maturity) - new Date();
+    return Math.max(0, Math.round(diff / 86400000));
+}
+
+// 年票息收入（年化，不考慮已實際收取）
+function corpBondAnnualCoupon(b) {
+    return (b.coupon / 100) * corpBondFaceTotal(b);
+}
+
+// ── Portfolio total NTD (investments only) ────────────────────────────
+
+function calcTotalNTD() {
+    let t = 0;
+    TW_DATA.forEach(h => {
+        const p = QUOTES[h.ticker]?.price ?? h.cost;
+        t += p * h.lots * 1000;
+    });
+    US_DATA.forEach(h => {
+        const p = QUOTES[h.ticker]?.price ?? h.cost;
+        t += p * h.shares * USD_TWD;
+    });
+    CFG.corp_bonds.forEach(b => {
+        t += corpBondMarketValue(b) * USD_TWD;
+    });
+    return t;
+}
+
+// ── Yahoo Finance fetch ───────────────────────────────────────────────
+
+async function fetchQuote(ticker) {
+    const base = `https://query%d.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`;
+    const urls = [base.replace('%d','1'), base.replace('%d','2')];
+    let data = null;
+
+    for (const url of urls) {
+        try {
+            const r = await fetch(url, {
+                headers: { Accept: 'application/json' },
+                signal: AbortSignal.timeout(8000),
+            });
+            if (r.ok) { data = await r.json(); break; }
+        } catch(_) {}
+    }
+
+    if (!data) {
+        try {
+            const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(urls[0])}`;
+            const r = await fetch(proxy, { signal: AbortSignal.timeout(12000) });
+            if (r.ok) data = await r.json();
+        } catch(_) {}
+    }
+
+    if (!data) return null;
+    try {
+        const meta = data.chart.result[0].meta;
+        const price = meta.regularMarketPrice;
+        const prev  = meta.chartPreviousClose ?? meta.previousClose ?? price;
+        const chg   = price - prev;
+        return {
+            price,
+            prevClose   : prev,
+            change      : chg,
+            changePct   : prev ? chg / prev * 100 : 0,
+            currency    : meta.currency,
+            marketState : meta.marketState ?? 'CLOSED',
+        };
+    } catch(_) { return null; }
+}
+
+async function fetchAllQuotes() {
+    const tickers = [
+        ...TW_DATA.map(h => h.ticker),
+        ...US_DATA.map(h => h.ticker),
+        'USDTWD=X',
+    ];
+    if (!tickers.length) return;
+
+    const results = await Promise.allSettled(tickers.map(t => fetchQuote(t)));
+    let err = 0;
+    results.forEach((r, i) => {
+        if (r.status === 'fulfilled' && r.value) QUOTES[tickers[i]] = r.value;
+        else err++;
+    });
+    hasError = err > 0;
+
+    if (QUOTES['USDTWD=X']?.price) USD_TWD = QUOTES['USDTWD=X'].price;
+}
+
+// ── Render Summary ────────────────────────────────────────────────────
+
+function renderSummary() {
+    const totalNTD    = calcTotalNTD();
+    let totalCostNTD  = 0;
+    let dailyNTD      = 0;
+
+    TW_DATA.forEach(h => {
+        const q = QUOTES[h.ticker];
+        const s = h.lots * 1000;
+        totalCostNTD += twBuyCostTotal(h.cost, s);
+        dailyNTD     += (q?.change ?? 0) * s;
+    });
+    US_DATA.forEach(h => {
+        const q = QUOTES[h.ticker];
+        totalCostNTD += h.cost * h.shares * USD_TWD;
+        dailyNTD     += (q?.change ?? 0) * h.shares * USD_TWD;
+    });
+    CFG.corp_bonds.forEach(b => {
+        totalCostNTD += corpBondCostValue(b) * USD_TWD;
+        // OTC 債無法計算今日損益（無報價更新）
+    });
+
+    const unrealized = totalNTD - totalCostNTD;
+    const reserveNTD = (CFG.reserve.NTD || 0) + (CFG.reserve.USD || 0) * USD_TWD;
+    const grandTotal = totalNTD + reserveNTD;
+    const dailyPct   = totalNTD > 0 ? dailyNTD / totalNTD * 100 : 0;
+    const unrPct     = totalCostNTD > 0 ? unrealized / totalCostNTD * 100 : 0;
+
+    const loanNTD  = (loanData.NTD || 0) + (loanData.USD || 0) * USD_TWD;
+    const netAsset = grandTotal - loanNTD;
+
+    // 整體損益% = (淨資產 − 原始資金) / 原始資金 × 100
+    const overallPct  = initialCapital > 0 ? (netAsset - initialCapital) / initialCapital * 100 : null;
+    const overallGain = initialCapital > 0 ? netAsset - initialCapital : null;
+
+    const staticCards = [
+        { label: '總市值 (NTD)',    val: wan(totalNTD),          sub: fmtP(totalNTD) + ' NTD' },
+        { label: '今日損益 (NTD)',   val: fmt(dailyNTD, 0, '$'),  sub: fmt(dailyPct, 2) + '%', c: cc(dailyNTD) },
+        { label: '未實現損益 (NTD)', val: fmt(unrealized, 0, '$'), sub: fmt(unrPct, 2) + '%', c: cc(unrealized) },
+        { label: '含準備金總資產',   val: wan(grandTotal),         sub: '準備金 ' + wan(reserveNTD) },
+    ].map(c => `
+        <div class="card">
+            <div class="card-label">${c.label}</div>
+            <div class="card-val ${c.c || ''}">${c.val}</div>
+            <div class="card-sub">${c.sub || ''}</div>
+        </div>`).join('');
+
+    const returnCard = `
+        <div class="card card-return">
+            <div class="card-label">整體損益 % <small style="font-size:0.6rem;color:var(--dim);text-transform:none">（點原始資金編輯）</small></div>
+            <div class="card-val ${overallPct === null ? 'neu' : cc(overallPct)}">
+                ${overallPct === null ? '—' : fmt(overallPct, 2) + '%'}
+            </div>
+            <div class="card-sub" style="margin-top:6px">
+                ${overallGain !== null ? '損益 ' + fmt(overallGain, 0, '$') + ' NTD<br>' : ''}
+                原始資金：<span class="initcap-amount" id="initcap-val"
+                    onclick="startEditInitCap()"
+                    title="點擊設定原始投入資金">
+                    ${initialCapital > 0 ? wan(initialCapital) : '點此設定'}
+                </span>
+            </div>
+        </div>`;
+
+    // 借款卡（手動輸入，存 localStorage，僅供參考）
+    const loanCard = `
+        <div class="card card-loan">
+            <div class="card-label">借款 <small style="font-size:0.6rem;color:var(--dim);text-transform:none">（點數字編輯）</small></div>
+            <div class="loan-row">
+                <span class="loan-row-label">NTD</span>
+                <div class="loan-val-wrap">
+                    <span class="loan-amount" id="loan-val-NTD"
+                          onclick="startEditLoan('NTD')"
+                          title="點擊編輯借款台幣金額">
+                        ${loanData.NTD ? wan(loanData.NTD) : '—'}
+                    </span>
+                </div>
+            </div>
+            <div class="loan-row">
+                <span class="loan-row-label">USD</span>
+                <div class="loan-val-wrap">
+                    <span class="loan-amount" id="loan-val-USD"
+                          onclick="startEditLoan('USD')"
+                          title="點擊編輯借款美金金額">
+                        ${loanData.USD ? '$' + loanData.USD.toLocaleString() : '—'}
+                    </span>
+                </div>
+            </div>
+            <div class="loan-edit-hint">
+                合計 ≈ ${wan(loanNTD)} NTD ｜ 淨資產 ${wan(netAsset)}
+            </div>
+        </div>`;
+
+    const rateCard = `
+        <div class="card">
+            <div class="card-label">USD / TWD</div>
+            <div class="card-val">${fmtP(USD_TWD, 2)}</div>
+            <div class="card-sub">即時匯率</div>
+        </div>`;
+
+    document.getElementById('summaryCards').innerHTML = staticCards + returnCard + loanCard + rateCard;
+}
+
+// ── Render Heatmap ────────────────────────────────────────────────────
+
+function renderHeatmap() {
+    const cells = [];
+
+    TW_DATA.forEach(h => {
+        const q = QUOTES[h.ticker];
+        cells.push({ name: h.name, value: (q?.price ?? h.cost) * h.lots * 1000, pct: q?.changePct ?? 0 });
+    });
+    US_DATA.forEach(h => {
+        const q = QUOTES[h.ticker];
+        cells.push({ name: h.name, value: (q?.price ?? h.cost) * h.shares * USD_TWD, pct: q?.changePct ?? 0 });
+    });
+    CFG.corp_bonds.forEach(b => {
+        cells.push({ name: b.issuer, value: corpBondMarketValue(b) * USD_TWD, pct: 0 });
+    });
+
+    const total = cells.reduce((s, c) => s + c.value, 0);
+
+    document.getElementById('heatmap').innerHTML = cells.map(c => {
+        const wt = total > 0 ? c.value / total * 100 : 1;
+        const [bg, fg] = hmColor(c.pct);
+        return `<div class="hm-cell" style="background:${bg};color:${fg};flex-grow:${wt};height:${Math.max(wt * 1.2 + 40, 60)}px"
+                     title="${c.name}\n今日: ${fmt(c.pct,2)}%\n市值: ${wan(c.value)} NTD">
+                    <div class="hm-name">${c.name}</div>
+                    <div class="hm-chg">${c.pct !== 0 ? fmt(c.pct, 2) + '%' : '—'}</div>
+                    <div class="hm-wt">${wt.toFixed(1)}%</div>
+                </div>`;
+    }).join('');
+}
+
+// ── Render TW Table ───────────────────────────────────────────────────
+
+function buildTwRow(h, idx, totalNTD) {
+    const q      = QUOTES[h.ticker];
+    const price  = q?.price ?? h.cost;
+    const shares = h.lots * 1000;
+    const val    = price * shares;
+    const cost   = twBuyCostTotal(h.cost, shares);
+    const daily  = (q?.change ?? 0) * shares;
+    const unreal = val - cost;
+    const afterT = twAfterTaxPnL(h, price);
+    const wt     = totalNTD > 0 ? val / totalNTD * 100 : 0;
+    const pnlPct = cost > 0 ? (val - cost) / cost * 100 : 0;
+    return `<tr id="tw-row-${idx}">
+        <td>
+            <div class="tbl-name">${h.name}${marketBadge(q?.marketState)}</div>
+            <div class="tbl-sub">${h.ticker}</div>
+        </td>
+        <td>
+            <input class="tbl-input" type="number" min="0" step="0.5" value="${h.lots}"
+                   onchange="saveTwField(${idx},'lots',this.value)"
+                   title="張數（1張=1000股）">
+            <div class="tbl-sub" style="margin-top:2px">${shares.toLocaleString()} 股</div>
+        </td>
+        <td>
+            <input class="tbl-input" type="number" min="0" step="0.01" value="${h.cost}"
+                   onchange="saveTwField(${idx},'cost',this.value)"
+                   title="每股均成本（不含手續費）">
+        </td>
+        <td>${q ? fmtP(q.price) : '<span class="shimmer"></span>'}</td>
+        <td class="${cc(q?.changePct)}">${q ? fmt(q.changePct, 2) + '%' : '—'}</td>
+        <td class="${cc(daily)}">${q ? fmt(daily, 0, '$') : '—'}</td>
+        <td class="${cc(unreal)}">${fmt(unreal, 0, '$')}</td>
+        <td class="${cc(afterT)}">${q ? fmt(afterT, 0, '$') : '—'}</td>
+        <td>${wt.toFixed(1)}%</td>
+        <td class="${cc(pnlPct)}" style="font-weight:700">${fmt(pnlPct, 2)}%</td>
+        <td class="td-op"><button class="btn-del" onclick="deleteTwRow(${idx})" title="刪除此持股">×</button></td>
+    </tr>`;
+}
+
+function renderTwTable() {
+    const totalNTD = calcTotalNTD();
+    let rows = '', totVal = 0, totCost = 0, totDaily = 0;
+
+    TW_DATA.forEach((h, idx) => {
+        const q      = QUOTES[h.ticker];
+        const price  = q?.price ?? h.cost;
+        const shares = h.lots * 1000;
+        totVal   += price * shares;
+        totCost  += twBuyCostTotal(h.cost, shares);
+        totDaily += (q?.change ?? 0) * shares;
+        rows     += buildTwRow(h, idx, totalNTD);
+    });
+
+    const totUnreal  = totVal - totCost;
+    const totPnlPct  = totCost > 0 ? totUnreal / totCost * 100 : 0;
+    rows += `<tr class="tbl-total">
+        <td colspan="5">合計</td>
+        <td class="${cc(totDaily)}">${fmt(totDaily, 0, '$')}</td>
+        <td class="${cc(totUnreal)}">${fmt(totUnreal, 0, '$')}</td>
+        <td>—</td>
+        <td>${(totalNTD > 0 ? totVal / totalNTD * 100 : 0).toFixed(1)}%</td>
+        <td class="${cc(totPnlPct)}" style="font-weight:700">${fmt(totPnlPct, 2)}%</td>
+        <td></td>
+    </tr>`;
+
+    document.getElementById('twBody').innerHTML = rows;
+}
+
+// 欄位修改：只更新該行，不重繪整表
+function saveTwField(idx, field, raw) {
+    const val = parseFloat(raw);
+    if (isNaN(val) || val < 0) return;
+    TW_DATA[idx][field] = val;
+    saveTwData();
+    // 更新報價（如果 ticker 改變需要 refetch，這裡只重算損益）
+    const totalNTD = calcTotalNTD();
+    const newRow = buildTwRow(TW_DATA[idx], idx, totalNTD);
+    document.getElementById(`tw-row-${idx}`).outerHTML = newRow;
+    renderSummary();
+    renderHeatmap();
+}
+
+function deleteTwRow(idx) {
+    TW_DATA.splice(idx, 1);
+    saveTwData();
+    renderTwTable();
+    renderSummary();
+    renderHeatmap();
+}
+
+let twAddVisible = false;
+function showAddTwRow() {
+    if (twAddVisible) { hideAddTwRow(); return; }
+    twAddVisible = true;
+    const tbody = document.getElementById('twBody');
+    const addRow = `<tr class="add-row" id="tw-add-row">
+        <td>
+            <input class="add-row-input" id="tw-new-ticker" placeholder="代號，如 2330.TW" style="width:120px">
+            <input class="add-row-input" id="tw-new-name"   placeholder="名稱" style="width:70px;margin-top:4px">
+        </td>
+        <td><input class="add-row-input" id="tw-new-lots"  type="number" min="0" step="0.5" placeholder="張數"></td>
+        <td><input class="add-row-input" id="tw-new-cost"  type="number" min="0" step="0.01" placeholder="均成本"></td>
+        <td colspan="5" style="color:var(--dim);font-size:0.72rem">上市加 .TW，上櫃加 .TWO</td>
+        <td colspan="2" style="text-align:right">
+            <button class="btn-confirm" onclick="confirmAddTw()">確認</button>
+            <button class="btn-cancel"  onclick="hideAddTwRow()" style="margin-left:4px">取消</button>
+        </td>
+    </tr>`;
+    tbody.insertAdjacentHTML('beforeend', addRow);
+    document.getElementById('tw-new-ticker').focus();
+}
+
+function hideAddTwRow() {
+    twAddVisible = false;
+    document.getElementById('tw-add-row')?.remove();
+}
+
+function confirmAddTw() {
+    const ticker = document.getElementById('tw-new-ticker').value.trim();
+    const name   = document.getElementById('tw-new-name').value.trim() || ticker;
+    const lots   = parseFloat(document.getElementById('tw-new-lots').value);
+    const cost   = parseFloat(document.getElementById('tw-new-cost').value);
+    if (!ticker) { alert('請輸入股票代號'); return; }
+    if (isNaN(lots) || lots <= 0) { alert('請輸入有效張數'); return; }
+    if (isNaN(cost) || cost <= 0) { alert('請輸入有效均成本'); return; }
+    TW_DATA.push({ ticker, name, lots, cost });
+    saveTwData();
+    twAddVisible = false;
+    renderTwTable();
+    renderSummary();
+    renderHeatmap();
+    // 取得新股票報價
+    fetchQuote(ticker).then(q => { if (q) { QUOTES[ticker] = q; renderAll(); } });
+}
+
+// ── Render US Table ───────────────────────────────────────────────────
+
+function buildUsRow(h, idx, totalNTD) {
+    const q      = QUOTES[h.ticker];
+    const price  = q?.price ?? h.cost;
+    const val    = price * h.shares;
+    const daily  = (q?.change ?? 0) * h.shares;
+    const unreal = (price - h.cost) * h.shares;
+    const wt     = totalNTD > 0 ? val * USD_TWD / totalNTD * 100 : 0;
+    const pnlPct = h.cost > 0 ? (price - h.cost) / h.cost * 100 : 0;
+    return `<tr id="us-row-${idx}">
+        <td>
+            <div class="tbl-name">${h.name}${marketBadge(q?.marketState)}</div>
+            <div class="tbl-sub">${h.ticker}</div>
+        </td>
+        <td>
+            <input class="tbl-input" type="number" min="0" step="1" value="${h.shares}"
+                   onchange="saveUsField(${idx},'shares',this.value)"
+                   title="持股股數">
+        </td>
+        <td>
+            <input class="tbl-input tbl-input-wide" type="number" min="0" step="0.000001" value="${h.cost}"
+                   onchange="saveUsField(${idx},'cost',this.value)"
+                   title="每股均成本（USD）">
+        </td>
+        <td>${q ? '$' + fmtP(q.price) : '<span class="shimmer"></span>'}</td>
+        <td class="${cc(q?.changePct)}">${q ? fmt(q.changePct, 2) + '%' : '—'}</td>
+        <td class="${cc(daily)}">${q ? fmt(daily, 2, '$') : '—'}</td>
+        <td class="${cc(unreal)}">${fmt(unreal, 2, '$')}</td>
+        <td>${wan(val * USD_TWD)}</td>
+        <td>${wt.toFixed(1)}%</td>
+        <td class="${cc(pnlPct)}" style="font-weight:700">${fmt(pnlPct, 2)}%</td>
+        <td class="td-op"><button class="btn-del" onclick="deleteUsRow(${idx})" title="刪除此持股">×</button></td>
+    </tr>`;
+}
+
+function renderUsTable() {
+    const totalNTD = calcTotalNTD();
+    let rows = '', totValUSD = 0, totCostUSD = 0, totDayUSD = 0, totUnrUSD = 0;
+
+    US_DATA.forEach((h, idx) => {
+        const q      = QUOTES[h.ticker];
+        const price  = q?.price ?? h.cost;
+        const val    = price * h.shares;
+        totValUSD  += val;
+        totCostUSD += h.cost * h.shares;
+        totDayUSD  += (q?.change ?? 0) * h.shares;
+        totUnrUSD  += (price - h.cost) * h.shares;
+        rows       += buildUsRow(h, idx, totalNTD);
+    });
+
+    const totPnlPct = totCostUSD > 0 ? totUnrUSD / totCostUSD * 100 : 0;
+    rows += `<tr class="tbl-total">
+        <td colspan="5">合計</td>
+        <td class="${cc(totDayUSD)}">${fmt(totDayUSD, 2, '$')}</td>
+        <td class="${cc(totUnrUSD)}">${fmt(totUnrUSD, 2, '$')}</td>
+        <td>${wan(totValUSD * USD_TWD)}</td>
+        <td>${(totalNTD > 0 ? totValUSD * USD_TWD / totalNTD * 100 : 0).toFixed(1)}%</td>
+        <td class="${cc(totPnlPct)}" style="font-weight:700">${fmt(totPnlPct, 2)}%</td>
+        <td></td>
+    </tr>`;
+
+    document.getElementById('usBody').innerHTML = rows;
+}
+
+function saveUsField(idx, field, raw) {
+    const val = parseFloat(raw);
+    if (isNaN(val) || val < 0) return;
+    US_DATA[idx][field] = val;
+    saveUsData();
+    const totalNTD = calcTotalNTD();
+    document.getElementById(`us-row-${idx}`).outerHTML = buildUsRow(US_DATA[idx], idx, totalNTD);
+    renderSummary();
+    renderHeatmap();
+}
+
+function deleteUsRow(idx) {
+    US_DATA.splice(idx, 1);
+    saveUsData();
+    renderUsTable();
+    renderSummary();
+    renderHeatmap();
+}
+
+let usAddVisible = false;
+function showAddUsRow() {
+    if (usAddVisible) { hideAddUsRow(); return; }
+    usAddVisible = true;
+    const tbody = document.getElementById('usBody');
+    const addRow = `<tr class="add-row" id="us-add-row">
+        <td>
+            <input class="add-row-input" id="us-new-ticker" placeholder="代號，如 AAPL" style="width:100px">
+            <input class="add-row-input" id="us-new-name"   placeholder="名稱" style="width:80px;margin-top:4px">
+        </td>
+        <td><input class="add-row-input" id="us-new-shares" type="number" min="0" step="1" placeholder="股數"></td>
+        <td><input class="add-row-input" id="us-new-cost"   type="number" min="0" step="0.000001" placeholder="均成本 USD"></td>
+        <td colspan="5" style="color:var(--dim);font-size:0.72rem">輸入 Yahoo Finance 美股代號</td>
+        <td colspan="2" style="text-align:right">
+            <button class="btn-confirm" onclick="confirmAddUs()">確認</button>
+            <button class="btn-cancel"  onclick="hideAddUsRow()" style="margin-left:4px">取消</button>
+        </td>
+    </tr>`;
+    tbody.insertAdjacentHTML('beforeend', addRow);
+    document.getElementById('us-new-ticker').focus();
+}
+
+function hideAddUsRow() {
+    usAddVisible = false;
+    document.getElementById('us-add-row')?.remove();
+}
+
+function confirmAddUs() {
+    const ticker = document.getElementById('us-new-ticker').value.trim().toUpperCase();
+    const name   = document.getElementById('us-new-name').value.trim() || ticker;
+    const shares = parseFloat(document.getElementById('us-new-shares').value);
+    const cost   = parseFloat(document.getElementById('us-new-cost').value);
+    if (!ticker) { alert('請輸入股票代號'); return; }
+    if (isNaN(shares) || shares <= 0) { alert('請輸入有效股數'); return; }
+    if (isNaN(cost) || cost <= 0) { alert('請輸入有效均成本'); return; }
+    US_DATA.push({ ticker, name, shares, cost });
+    saveUsData();
+    usAddVisible = false;
+    renderUsTable();
+    renderSummary();
+    renderHeatmap();
+    fetchQuote(ticker).then(q => { if (q) { QUOTES[ticker] = q; renderAll(); } });
+}
+
+// ── Render Corp Bond Table ────────────────────────────────────────────
+
+function renderCorpBondTable() {
+    const totalNTD = calcTotalNTD();
+    let rows = '', totMV = 0, totCostUSD = 0, totRecvInt = 0;
+
+    CFG.corp_bonds.forEach(b => {
+        const curPct    = corpBondCurrentPrice(b);
+        const face      = corpBondFaceTotal(b);
+        const mv        = curPct / 100 * face;
+        const costUSD   = corpBondCostValue(b);         // 實際買入成本 USD
+        const capPnL    = mv - costUSD;                 // 資本損益（不含息）
+        const recvInt   = corpBondReceivedInt(b);       // 累計已收配息（由次數計算）
+        const count     = getCouponCount(b);            // 已收次數
+        const perPeriod = couponPerPeriod(b);           // 每期金額
+        const totalPnL  = capPnL + recvInt;             // 含息總損益
+        const priceDiff = curPct - b.cost;              // 與買入均價的價差 pts
+        const dtm       = daysToMaturity(b.maturity);
+        const mvNTD     = mv * USD_TWD;
+        const wt        = totalNTD > 0 ? mvNTD / totalNTD * 100 : 0;
+        const pledgeTag = b.pledged
+            ? `<span class="badge" style="background:rgba(248,81,73,0.15);color:var(--red)">設質</span>`
+            : '';
+
+        totMV       += mv;
+        totCostUSD  += costUSD;
+        totRecvInt  += recvInt;
+
+        rows += `<tr>
+            <td>
+                <div class="tbl-name">${b.label} <span class="coupon-tag">${b.coupon}%</span>${pledgeTag}</div>
+                <div class="tbl-sub">${b.issuer} ｜ 剩 ${dtm.toLocaleString()} 天到期 ｜ ${b.isin}</div>
+            </td>
+            <td>
+                <div>$${costUSD.toLocaleString()}</div>
+                <div class="tbl-sub">面額 $${face.toLocaleString()}</div>
+            </td>
+            <td>${fmtP(b.cost, 2)}%</td>
+            <td>
+                <input class="price-input" type="number" step="0.01" min="0" max="200"
+                       value="${fmtP(curPct, 2)}"
+                       data-isin="${b.isin}"
+                       onchange="onCorpPriceChange(this)"
+                       title="輸入銀行提供的參考市價（% of par）">
+            </td>
+            <td class="${cc(capPnL)}">${fmt(capPnL, 0, '$')}<br><span class="tbl-sub ${cc(priceDiff)}">${fmt(priceDiff, 2)} pts</span></td>
+            <td style="text-align:center">
+                <input class="price-input" type="number" min="0" step="1" value="${count}"
+                       style="width:60px;text-align:center"
+                       data-isin="${b.isin}"
+                       onchange="onCouponCountChange(this)"
+                       title="已收到幾次配息（每次 $${fmtP(perPeriod,2)}）">
+                <div class="tbl-sub" style="margin-top:2px">×$${fmtP(perPeriod,0)}</div>
+                ${couponMonthHint(b)}
+            </td>
+            <td class="pos">+$${fmtP(recvInt, 0)}</td>
+            <td class="${cc(totalPnL)}">${fmt(totalPnL, 0, '$')}</td>
+            <td>$${fmtP(mv, 0)}</td>
+            <td>${wan(mvNTD)}</td>
+            <td>${wt.toFixed(1)}%</td>
+            <td class="${cc(totalPnL)}" style="font-weight:700">${costUSD > 0 ? fmt(totalPnL / costUSD * 100, 2) + '%' : '—'}</td>
+        </tr>`;
+    });
+
+    const totCapPnL   = totMV - totCostUSD;
+    const totTotalPnL = totCapPnL + totRecvInt;
+    rows += `<tr class="tbl-total">
+        <td>合計</td>
+        <td>$${totCostUSD.toLocaleString()}</td>
+        <td>—</td>
+        <td>—</td>
+        <td class="${cc(totCapPnL)}">${fmt(totCapPnL, 0, '$')}</td>
+        <td>—</td>
+        <td class="pos">+$${fmtP(totRecvInt, 0)}</td>
+        <td class="${cc(totTotalPnL)}">${fmt(totTotalPnL, 0, '$')}</td>
+        <td>$${fmtP(totMV, 0)}</td>
+        <td>${wan(totMV * USD_TWD)}</td>
+        <td>${(totalNTD > 0 ? totMV * USD_TWD / totalNTD * 100 : 0).toFixed(1)}%</td>
+        <td class="${cc(totTotalPnL)}" style="font-weight:700">${totCostUSD > 0 ? fmt(totTotalPnL / totCostUSD * 100, 2) + '%' : '—'}</td>
+    </tr>`;
+
+    document.getElementById('corpBondBody').innerHTML = rows;
+}
+
+function onCorpPriceChange(input) {
+    const isin = input.dataset.isin;
+    const val  = parseFloat(input.value);
+    if (isNaN(val) || val <= 0) return;
+    corpPrices[isin] = val;
+    saveCorpPrices();
+    renderAll();
+}
+
+function onCouponCountChange(input) {
+    const isin  = input.dataset.isin;
+    const count = parseInt(input.value, 10);
+    if (isNaN(count) || count < 0) return;
+    corpCouponCounts[isin] = count;
+    saveCorpCounts();
+    renderCorpBondTable();
+    renderSummary();
+}
+
+// ── 匯出 / 匯入設定 ───────────────────────────────────────────────────
+
+function exportSettings() {
+    const payload = {
+        _note          : '投資損益追蹤器設定檔，請勿手動修改結構',
+        exported_at    : new Date().toISOString(),
+        tw_holdings    : TW_DATA,
+        us_holdings    : US_DATA,
+        corp_prices    : corpPrices,
+        corp_coupon_counts: corpCouponCounts,
+        loan           : loanData,
+        initial_capital: initialCapital,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `portfolio_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function importSettings() {
+    const input  = document.createElement('input');
+    input.type   = 'file';
+    input.accept = '.json,application/json';
+    input.onchange = e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+            try {
+                const d = JSON.parse(ev.target.result);
+                if (d.tw_holdings)          { TW_DATA = d.tw_holdings;  saveTwData(); }
+                if (d.us_holdings)          { US_DATA = d.us_holdings;  saveUsData(); }
+                if (d.corp_prices)          { corpPrices = d.corp_prices; saveCorpPrices(); }
+                if (d.corp_coupon_counts)   { corpCouponCounts = d.corp_coupon_counts; saveCorpCounts(); }
+                if (d.loan)                 { loanData = d.loan; saveLoan(); }
+                if (d.initial_capital != null) { initialCapital = parseFloat(d.initial_capital) || 0; saveInitialCapital(); }
+                renderAll();
+                alert('✅ 設定匯入成功！（' + (d.exported_at ? '備份時間：' + d.exported_at.slice(0,10) : '') + '）');
+            } catch(_) {
+                alert('❌ 匯入失敗，請確認是從本工具匯出的 JSON 檔');
+            }
+        };
+        reader.readAsText(file);
+    };
+    document.body.appendChild(input);
+    input.click();
+    document.body.removeChild(input);
+}
+
+// ── Render Reserve ────────────────────────────────────────────────────
+
+function renderReserve() {
+    const ntd      = CFG.reserve.NTD || 0;
+    const usd      = CFG.reserve.USD || 0;
+    const usdNTD   = usd * USD_TWD;
+    const total    = ntd + usdNTD;
+    const invNTD   = calcTotalNTD();
+    const grand    = invNTD + total;
+
+    document.getElementById('reserveGrid').innerHTML = `
+        <div class="card">
+            <div class="card-label">新台幣</div>
+            <div class="card-val">${wan(ntd)}</div>
+            <div class="card-sub">${ntd.toLocaleString()} NTD</div>
+        </div>
+        <div class="card">
+            <div class="card-label">美金</div>
+            <div class="card-val">$${usd.toLocaleString()}</div>
+            <div class="card-sub">≈ ${wan(usdNTD)} NTD</div>
+        </div>
+        <div class="card">
+            <div class="card-label">準備金合計</div>
+            <div class="card-val">${wan(total)}</div>
+            <div class="card-sub">佔總資產 ${grand > 0 ? (total/grand*100).toFixed(1) : '—'}%</div>
+        </div>`;
+}
+
+// ── Main ──────────────────────────────────────────────────────────────
+
+function renderAll() {
+    renderSummary();
+    renderHeatmap();
+    renderTwTable();
+    renderUsTable();
+    renderCorpBondTable();
+    renderReserve();
+    document.getElementById('apiNotice').style.display = hasError ? 'block' : 'none';
+    const now = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });
+    document.getElementById('lastUpdate').textContent = `最後更新: ${now}`;
+}
+
+async function doRefresh() {
+    if (loading) return;
+    loading = true;
+    const btn = document.getElementById('refreshBtn');
+    btn.disabled = true;
+    btn.textContent = '更新中...';
+    document.getElementById('lastUpdate').textContent = '更新中...';
+    try {
+        await fetchAllQuotes();
+        renderAll();
+    } finally {
+        loading = false;
+        btn.disabled = false;
+        btn.textContent = '↻ 立即更新';
+    }
+}
+
+// 5 分鐘自動刷新台股/美股報價
+setInterval(doRefresh, 5 * 60 * 1000);
+
+// 首次載入
+doRefresh();
+</script>
+</body>
+</html>
