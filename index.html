@@ -742,6 +742,35 @@ let initialCapital = 0;
 try { initialCapital = parseFloat(localStorage.getItem(INIT_CAP_KEY) || '0') || 0; } catch(_) {}
 function saveInitialCapital() { localStorage.setItem(INIT_CAP_KEY, String(initialCapital)); }
 
+// 準備金（手動輸入，存 localStorage）
+const RESERVE_KEY = 'reserve_v1';
+let reserveData = { NTD: CFG.reserve.NTD || 0, USD: CFG.reserve.USD || 0 };
+try {
+    const _r = JSON.parse(localStorage.getItem(RESERVE_KEY));
+    if (_r && typeof _r === 'object') reserveData = _r;
+} catch(_) {}
+function saveReserve() { localStorage.setItem(RESERVE_KEY, JSON.stringify(reserveData)); }
+
+function startEditReserve(currency) {
+    const el = document.getElementById(`reserve-val-${currency}`);
+    if (!el) return;
+    const cur = reserveData[currency] || 0;
+    el.outerHTML = `<input class="loan-edit-input" id="reserve-input-${currency}"
+        type="number" min="0" value="${cur}"
+        onblur="commitReserve('${currency}',this.value)"
+        onkeydown="if(event.key==='Enter')this.blur()"
+        autofocus>`;
+    setTimeout(() => document.getElementById(`reserve-input-${currency}`)?.select(), 30);
+}
+
+function commitReserve(currency, raw) {
+    const val = parseFloat(raw);
+    reserveData[currency] = isNaN(val) || val < 0 ? 0 : val;
+    saveReserve();
+    renderReserve();
+    renderSummary();
+}
+
 // 借款記錄：僅供個人參考，不影響損益計算
 const LOAN_KEY = 'loan_record_v1';
 let loanData = { NTD: 0, USD: 0 };
@@ -990,7 +1019,7 @@ function renderSummary() {
     });
 
     const unrealized = totalNTD - totalCostNTD;
-    const reserveNTD = (CFG.reserve.NTD || 0) + (CFG.reserve.USD || 0) * USD_TWD;
+    const reserveNTD = (reserveData.NTD || 0) + (reserveData.USD || 0) * USD_TWD;
     const grandTotal = totalNTD + reserveNTD;
     const dailyPct   = totalNTD > 0 ? dailyNTD / totalNTD * 100 : 0;
     const unrPct     = totalCostNTD > 0 ? unrealized / totalCostNTD * 100 : 0;
@@ -1477,6 +1506,7 @@ function exportSettings() {
         us_holdings    : US_DATA,
         corp_prices    : corpPrices,
         corp_coupon_counts: corpCouponCounts,
+        reserve        : reserveData,
         loan           : loanData,
         initial_capital: initialCapital,
     };
@@ -1506,6 +1536,7 @@ function importSettings() {
                 if (d.us_holdings)          { US_DATA = d.us_holdings;  saveUsData(); }
                 if (d.corp_prices)          { corpPrices = d.corp_prices; saveCorpPrices(); }
                 if (d.corp_coupon_counts)   { corpCouponCounts = d.corp_coupon_counts; saveCorpCounts(); }
+                if (d.reserve)              { reserveData = d.reserve; saveReserve(); }
                 if (d.loan)                 { loanData = d.loan; saveLoan(); }
                 if (d.initial_capital != null) { initialCapital = parseFloat(d.initial_capital) || 0; saveInitialCapital(); }
                 renderAll();
@@ -1524,28 +1555,41 @@ function importSettings() {
 // ── Render Reserve ────────────────────────────────────────────────────
 
 function renderReserve() {
-    const ntd      = CFG.reserve.NTD || 0;
-    const usd      = CFG.reserve.USD || 0;
-    const usdNTD   = usd * USD_TWD;
-    const total    = ntd + usdNTD;
-    const invNTD   = calcTotalNTD();
-    const grand    = invNTD + total;
+    const ntd    = reserveData.NTD || 0;
+    const usd    = reserveData.USD || 0;
+    const usdNTD = usd * USD_TWD;
+    const total  = ntd + usdNTD;
+    const invNTD = calcTotalNTD();
+    const grand  = invNTD + total;
 
     document.getElementById('reserveGrid').innerHTML = `
-        <div class="card">
-            <div class="card-label">新台幣</div>
-            <div class="card-val">${wan(ntd)}</div>
-            <div class="card-sub">${ntd.toLocaleString()} NTD</div>
-        </div>
-        <div class="card">
-            <div class="card-label">美金</div>
-            <div class="card-val">$${usd.toLocaleString()}</div>
-            <div class="card-sub">≈ ${wan(usdNTD)} NTD</div>
-        </div>
-        <div class="card">
-            <div class="card-label">準備金合計</div>
-            <div class="card-val">${wan(total)}</div>
-            <div class="card-sub">佔總資產 ${grand > 0 ? (total/grand*100).toFixed(1) : '—'}%</div>
+        <div class="card card-loan" style="border-color:rgba(61,193,100,0.3)">
+            <div class="card-label">準備金 <small style="font-size:0.6rem;color:var(--dim);text-transform:none">（點數字編輯）</small></div>
+            <div class="loan-row">
+                <span class="loan-row-label">NTD</span>
+                <div class="loan-val-wrap">
+                    <span class="loan-amount" id="reserve-val-NTD"
+                          onclick="startEditReserve('NTD')"
+                          title="點擊編輯準備金台幣"
+                          style="color:var(--green)">
+                        ${ntd ? wan(ntd) : '—'}
+                    </span>
+                </div>
+            </div>
+            <div class="loan-row">
+                <span class="loan-row-label">USD</span>
+                <div class="loan-val-wrap">
+                    <span class="loan-amount" id="reserve-val-USD"
+                          onclick="startEditReserve('USD')"
+                          title="點擊編輯準備金美金"
+                          style="color:var(--green)">
+                        ${usd ? '$' + usd.toLocaleString() : '—'}
+                    </span>
+                </div>
+            </div>
+            <div class="loan-edit-hint">
+                合計 ≈ ${wan(total)} NTD ｜ 佔總資產 ${grand > 0 ? (total/grand*100).toFixed(1) : '—'}%
+            </div>
         </div>`;
 }
 
