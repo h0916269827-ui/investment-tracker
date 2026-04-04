@@ -1029,17 +1029,8 @@ function renderSummary() {
     const overallPct  = initialCapital > 0 ? (netAsset - initialCapital) / initialCapital * 100 : null;
     const overallGain = initialCapital > 0 ? netAsset - initialCapital : null;
 
-    const staticCards = [
-        { label: '總市值 (NTD)',    val: wan(totalNTD),          sub: fmtP(totalNTD) + ' NTD' },
-        { label: '今日損益 (NTD)',   val: fmt(dailyNTD, 0, '$'),  sub: fmt(dailyPct, 2) + '%', c: cc(dailyNTD) },
-        { label: '未實現損益 (NTD)', val: fmt(unrealized, 0, '$'), sub: fmt(unrPct, 2) + '%', c: cc(unrealized) },
-        { label: '含準備金總資產',   val: wan(grandTotal),         sub: '準備金 ' + wan(reserveNTD) },
-    ].map(c => `
-        <div class="card">
-            <div class="card-label">${c.label}</div>
-            <div class="card-val ${c.c || ''}">${c.val}</div>
-            <div class="card-sub">${c.sub || ''}</div>
-        </div>`).join('');
+    const sc = (label, val, sub, c='') =>
+        `<div class="card"><div class="card-label">${label}</div><div class="card-val ${c}">${val}</div><div class="card-sub">${sub}</div></div>`;
 
     const returnCard = `
         <div class="card card-return">
@@ -1123,7 +1114,14 @@ function renderSummary() {
             <div class="card-sub">即時匯率</div>
         </div>`;
 
-    document.getElementById('summaryCards').innerHTML = staticCards + returnCard + loanCard + reserveCard + rateCard;
+    // 順序：總市值 | 整體損益% | 未實現損益 | 今日損益 | 含準備金總資產 | 借款 | 準備金 | 匯率
+    document.getElementById('summaryCards').innerHTML =
+        sc('總市值 (NTD)',    wan(totalNTD),          fmtP(totalNTD) + ' NTD') +
+        returnCard +
+        sc('未實現損益 (NTD)', fmt(unrealized, 0, '$'), fmt(unrPct, 2) + '%', cc(unrealized)) +
+        sc('今日損益 (NTD)',   fmt(dailyNTD, 0, '$'),  fmt(dailyPct, 2) + '%', cc(dailyNTD)) +
+        sc('含準備金總資產',   wan(grandTotal),         '準備金 ' + wan(reserveNTD)) +
+        loanCard + reserveCard + rateCard;
 }
 
 // ── Render Heatmap ────────────────────────────────────────────────────
@@ -1377,26 +1375,30 @@ async function confirmAddTw() {
     const btn = document.getElementById('tw-add-btn');
     const status = document.getElementById('tw-add-status');
     if (btn) { btn.disabled = true; btn.textContent = '查詢中…'; }
+    if (status) status.textContent = '查詢 Yahoo Finance 中…';
 
     // 自動補後綴：優先 .TW（上市），查不到再試 .TWO（上櫃）
     let ticker = raw.includes('.') ? raw : raw + '.TW';
     let q = await fetchQuote(ticker);
     if (!q && !raw.includes('.')) {
+        if (status) status.textContent = '上市查無，改試上櫃…';
         ticker = raw + '.TWO';
         q = await fetchQuote(ticker);
     }
 
-    const name = q?.shortName || raw;
-    if (q) QUOTES[ticker] = q;
-    else if (status) status.textContent = '⚠️ 查不到報價，以均成本顯示';
+    let name;
+    if (q) {
+        name = q.shortName || ticker;   // 優先用 Yahoo 名稱，抓不到才用代號
+        QUOTES[ticker] = q;
+    } else {
+        name = ticker;                  // fetch 失敗：至少顯示代號（含 .TW），可點擊修改
+    }
 
     TW_DATA.push({ ticker, name, lots, cost });
     saveTwData();
     twAddVisible = false;
-    renderTwTable();
-    renderSummary();
-    renderHeatmap();
-    if (q) renderAll();
+    // 無論是否抓到，強制 refresh 一次確保收盤價載入
+    doRefresh(true);
 }
 
 // ── Render US Table ───────────────────────────────────────────────────
@@ -1529,19 +1531,21 @@ async function confirmAddUs() {
     const btn = document.getElementById('us-add-btn');
     const status = document.getElementById('us-add-status');
     if (btn) { btn.disabled = true; btn.textContent = '查詢中…'; }
+    if (status) status.textContent = '查詢 Yahoo Finance 中…';
 
     const q = await fetchQuote(ticker);
-    const name = q?.shortName || ticker;
-    if (q) QUOTES[ticker] = q;
-    else if (status) status.textContent = '⚠️ 查不到報價，以均成本顯示';
+    let name;
+    if (q) {
+        name = q.shortName || ticker;
+        QUOTES[ticker] = q;
+    } else {
+        name = ticker;
+    }
 
     US_DATA.push({ ticker, name, shares, cost });
     saveUsData();
     usAddVisible = false;
-    renderUsTable();
-    renderSummary();
-    renderHeatmap();
-    if (q) renderAll();
+    doRefresh(true);
 }
 
 // ── Render Corp Bond Table ────────────────────────────────────────────
