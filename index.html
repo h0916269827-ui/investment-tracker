@@ -109,7 +109,8 @@
             border-radius: var(--radius);
             padding: 14px;
         }
-        .heatmap { display: flex; flex-wrap: wrap; gap: 4px; align-items: stretch; }
+        .heatmap { display: flex; flex-direction: column; gap: 4px; }
+        .hm-row  { display: flex; gap: 4px; }
         .hm-cell {
             display: flex;
             flex-direction: column;
@@ -120,8 +121,7 @@
             cursor: default;
             overflow: hidden;
             transition: filter 0.15s;
-            min-width: 55px;
-            min-height: 55px;
+            min-width: 40px;
         }
         .hm-cell:hover { filter: brightness(1.15); }
         .hm-cell .hm-name { font-size: 0.72rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; text-align: center; }
@@ -1128,7 +1128,6 @@ function renderSummary() {
 
 function renderHeatmap() {
     const cells = [];
-
     TW_DATA.forEach(h => {
         const q = QUOTES[h.ticker];
         cells.push({ name: h.name, value: (q?.price ?? h.cost) * h.lots * 1000, pct: q?.changePct ?? 0 });
@@ -1141,18 +1140,47 @@ function renderHeatmap() {
         cells.push({ name: b.issuer, value: corpBondMarketValue(b) * USD_TWD, pct: 0 });
     });
 
-    const total = cells.reduce((s, c) => s + c.value, 0);
+    if (!cells.length) { document.getElementById('heatmap').innerHTML = ''; return; }
 
-    document.getElementById('heatmap').innerHTML = cells.map(c => {
-        const wt = total > 0 ? c.value / total * 100 : 1;
+    const total = cells.reduce((s, c) => s + c.value, 0);
+    // 按市值排序，計算各格權重
+    const sorted = [...cells].sort((a, b) => b.value - a.value)
+                             .map(c => ({ ...c, wt: total > 0 ? c.value / total * 100 : 100 / cells.length }));
+
+    // 分兩排：累計到 ~50% 為止放第一排，其餘放第二排
+    const rows = [[], []];
+    let cum = 0;
+    for (const c of sorted) {
+        rows[cum < 50 ? 0 : 1].push(c);
+        cum += c.wt;
+    }
+    // 若只有一排（全部進 row0），平均拆半
+    if (!rows[1].length) {
+        const mid = Math.ceil(rows[0].length / 2);
+        rows[1] = rows[0].splice(mid);
+    }
+
+    // 各排高度按其市值占比決定，總高 150px
+    const TOTAL_H = 150, GAP = 4;
+    const w0 = rows[0].reduce((s, c) => s + c.wt, 0);
+    const w1 = rows[1].reduce((s, c) => s + c.wt, 0);
+    const h0 = Math.round(TOTAL_H * w0 / (w0 + w1));
+    const h1 = TOTAL_H - h0 - GAP;
+
+    const cellHTML = (c) => {
         const [bg, fg] = hmColor(c.pct);
-        return `<div class="hm-cell" style="background:${bg};color:${fg};flex-grow:${wt};min-height:${Math.max(wt * 1.2 + 40, 60)}px"
+        return `<div class="hm-cell" style="background:${bg};color:${fg};flex-grow:${c.wt}"
                      title="${c.name}\n今日: ${fmt(c.pct,2)}%\n市值: ${wan(c.value)} NTD">
                     <div class="hm-name">${c.name}</div>
-                    <div class="hm-chg">${c.pct !== 0 ? fmt(c.pct, 2) + '%' : '—'}</div>
-                    <div class="hm-wt">${wt.toFixed(1)}%</div>
+                    <div class="hm-chg">${c.pct !== 0 ? fmt(c.pct,2)+'%' : '—'}</div>
+                    <div class="hm-wt">${c.wt.toFixed(1)}%</div>
                 </div>`;
-    }).join('');
+    };
+
+    const rowHTML = (row, h) =>
+        `<div class="hm-row" style="height:${h}px">${row.map(cellHTML).join('')}</div>`;
+
+    document.getElementById('heatmap').innerHTML = rowHTML(rows[0], h0) + rowHTML(rows[1], h1);
 }
 
 // ── Render TW Table ───────────────────────────────────────────────────
