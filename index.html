@@ -109,7 +109,7 @@
             border-radius: var(--radius);
             padding: 14px;
         }
-        .heatmap { display: flex; flex-wrap: wrap; gap: 4px; }
+        .heatmap { display: flex; flex-wrap: wrap; gap: 4px; align-items: stretch; }
         .hm-cell {
             display: flex;
             flex-direction: column;
@@ -1146,7 +1146,7 @@ function renderHeatmap() {
     document.getElementById('heatmap').innerHTML = cells.map(c => {
         const wt = total > 0 ? c.value / total * 100 : 1;
         const [bg, fg] = hmColor(c.pct);
-        return `<div class="hm-cell" style="background:${bg};color:${fg};flex-grow:${wt};height:${Math.max(wt * 1.2 + 40, 60)}px"
+        return `<div class="hm-cell" style="background:${bg};color:${fg};flex-grow:${wt};min-height:${Math.max(wt * 1.2 + 40, 60)}px"
                      title="${c.name}\n今日: ${fmt(c.pct,2)}%\n市值: ${wan(c.value)} NTD">
                     <div class="hm-name">${c.name}</div>
                     <div class="hm-chg">${c.pct !== 0 ? fmt(c.pct, 2) + '%' : '—'}</div>
