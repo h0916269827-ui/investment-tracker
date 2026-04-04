@@ -396,7 +396,7 @@
         <span class="last-update" id="lastUpdate">載入中...</span>
         <button class="btn" onclick="exportSettings()" title="匯出所有設定為 JSON 檔，可備份或在其他裝置匯入">📤 匯出</button>
         <button class="btn" onclick="importSettings()" title="從 JSON 檔匯入設定（覆蓋目前資料）">📥 匯入</button>
-        <button class="btn" id="refreshBtn" onclick="doRefresh()">↻ 立即更新</button>
+        <button class="btn" id="refreshBtn" onclick="doRefresh(true)">↻ 立即更新</button>
     </div>
 </div>
 
@@ -1610,7 +1610,19 @@ function renderAll() {
     document.getElementById('lastUpdate').textContent = `最後更新: ${now}`;
 }
 
-async function doRefresh() {
+// 判斷台股或美股是否可能在交易時段（台灣時間）
+function anyMarketMaybeOpen() {
+    const tw  = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Taipei' }));
+    const day = tw.getDay(); // 0=日, 6=六
+    const mins = tw.getHours() * 60 + tw.getMinutes();
+    if (day === 0) return false;                          // 星期日：全閉
+    if (day === 6) return mins <= 5 * 60;                // 星期六：只有美股收盤前（05:00前）
+    const twOpen = mins >= 8*60+30 && mins <= 14*60;     // 台股 08:30-14:00
+    const usOpen = mins >= 21*60   || mins <= 5*60;      // 美股 21:00-05:00
+    return twOpen || usOpen;
+}
+
+async function doRefresh(force = false) {
     if (loading) return;
     loading = true;
     const btn = document.getElementById('refreshBtn');
@@ -1618,7 +1630,8 @@ async function doRefresh() {
     btn.textContent = '更新中...';
     document.getElementById('lastUpdate').textContent = '更新中...';
     try {
-        await fetchAllQuotes();
+        const needFetch = force || Object.keys(QUOTES).length === 0 || anyMarketMaybeOpen();
+        if (needFetch) await fetchAllQuotes();
         renderAll();
     } finally {
         loading = false;
@@ -1627,11 +1640,11 @@ async function doRefresh() {
     }
 }
 
-// 5 分鐘自動刷新台股/美股報價
-setInterval(doRefresh, 5 * 60 * 1000);
+// 15 秒自動刷新（開盤時段才打 API，休市只重繪）
+setInterval(() => doRefresh(false), 15 * 1000);
 
 // 首次載入
-doRefresh();
+doRefresh(true);
 </script>
 </body>
 </html>
