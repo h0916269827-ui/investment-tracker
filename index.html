@@ -83,9 +83,21 @@
         .card-sub { font-size: 0.72rem; color: var(--dim); margin-top: 5px; }
 
         /* ── Colors ── */
-        .pos { color: var(--green); }
-        .neg { color: var(--red); }
+        .pos { color: var(--red); }
+        .neg { color: var(--green); }
         .neu { color: var(--dim); }
+
+        /* ── 漲停 badge ── */
+        .badge-limitup {
+            display: inline-block;
+            background: var(--red);
+            color: #fff;
+            border-radius: 4px;
+            padding: 1px 7px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }
 
         /* ── Section ── */
         .section { margin-bottom: 18px; }
@@ -1285,7 +1297,7 @@ function buildTwRow(h, idx, totalNTD) {
                    title="每股均成本（不含手續費）">
         </td>
         <td>${q ? fmtP(q.price) : (fetchAttempted ? '<span class="neu">—</span>' : '<span class="shimmer"></span>')}</td>
-        <td class="${cc(q?.changePct)}">${q ? fmt(q.changePct, 2) + '%' : '—'}</td>
+        <td class="${cc(q?.changePct)}">${q ? (q.changePct >= 9.95 ? '<span class="badge-limitup">漲停</span>' : fmt(q.changePct, 2) + '%') : '—'}</td>
         <td class="${cc(daily)}">${q ? fmt(daily, 0, '$') : '—'}</td>
         <td>${wan(val)}</td>
         <td class="${cc(afterT)}">${q ? fmt(afterT, 0, '$') : '—'}</td>
