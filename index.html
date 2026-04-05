@@ -520,6 +520,64 @@
     </div>
 </div>
 
+<!-- ─── 新增企業債券 Modal ─── -->
+<div class="modal-overlay" id="corpModal" onclick="if(event.target===this)closeCorpModal()">
+    <div class="modal-box" style="max-width:520px">
+        <h3>🏦 新增企業債券</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+                <div class="modal-label">顯示名稱</div>
+                <input class="modal-input" id="cb-label" placeholder="例：JPM 5.0% 2034">
+            </div>
+            <div>
+                <div class="modal-label">發行機構</div>
+                <input class="modal-input" id="cb-issuer" placeholder="例：JPMorgan Chase">
+            </div>
+            <div>
+                <div class="modal-label">ISIN</div>
+                <input class="modal-input" id="cb-isin" placeholder="例：US46647PDY97" style="text-transform:uppercase">
+            </div>
+            <div>
+                <div class="modal-label">票息率 %（年）</div>
+                <input class="modal-input" id="cb-coupon" type="number" step="0.01" min="0" placeholder="例：5.0">
+            </div>
+            <div>
+                <div class="modal-label">到期日</div>
+                <input class="modal-input" id="cb-maturity" type="date">
+            </div>
+            <div>
+                <div class="modal-label">每張面額 USD</div>
+                <input class="modal-input" id="cb-face" type="number" min="1" placeholder="例：200000">
+            </div>
+            <div>
+                <div class="modal-label">持有張數</div>
+                <input class="modal-input" id="cb-qty" type="number" min="1" step="1" placeholder="例：1">
+            </div>
+            <div>
+                <div class="modal-label">買入均價 % of par</div>
+                <input class="modal-input" id="cb-cost" type="number" step="0.01" min="0" placeholder="例：108.80" oninput="cbAutoCalcCost()">
+            </div>
+            <div style="grid-column:1/-1">
+                <div class="modal-label">實際買入成本 USD <small style="color:var(--dim)">（選填，留空自動計算）</small></div>
+                <input class="modal-input" id="cb-costUSD" type="number" step="1" min="0" placeholder="自動計算：均價% × 面額 × 張數">
+            </div>
+            <div>
+                <div class="modal-label">配息月份 <small style="color:var(--dim)">（逗號分隔）</small></div>
+                <input class="modal-input" id="cb-months" placeholder="例：1,7 或 4,10">
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding-top:22px">
+                <input type="checkbox" id="cb-pledged" style="width:16px;height:16px;cursor:pointer">
+                <label for="cb-pledged" style="cursor:pointer;font-size:0.85rem">設質中</label>
+            </div>
+        </div>
+        <div class="modal-actions" style="margin-top:14px">
+            <button class="btn" onclick="confirmAddCorpBond()" style="background:var(--accent);color:#000;border-color:var(--accent)">確認新增</button>
+            <button class="btn" onclick="closeCorpModal()">取消</button>
+        </div>
+        <div class="modal-hint" id="corpModalHint" style="margin-top:8px"></div>
+    </div>
+</div>
+
 <!-- ─── Notices ─── -->
 <div class="notice notice-warn" id="apiNotice">
     ⚠ 部分報價無法取得（市場休市或 API 限制），顯示最後快取資料。
@@ -621,6 +679,8 @@
     <div class="section-title">
         <span>🏦</span> 企業債券（OTC）
         <small style="font-size:0.65rem;color:var(--dim)">手動輸入報價（% of par）｜ 含應計利息估算</small>
+        <span id="corpMonthlyIncome" style="margin-left:8px;font-size:0.68rem;color:var(--yellow)"></span>
+        <button class="btn-add-row" style="margin-left:auto" onclick="showAddCorpModal()">＋ 新增債券</button>
     </div>
     <div class="tbl-wrap">
         <table>
@@ -637,6 +697,7 @@
                     <th>目前市值 USD</th>
                     <th>佔比</th>
                     <th><abbr title="含息總損益 ÷ 買入成本">含息損益%</abbr></th>
+                    <th class="th-op"></th>
                 </tr>
             </thead>
             <tbody id="corpBondBody"></tbody>
@@ -757,6 +818,20 @@ let loading = false;
 let hasError = false;
 let fetchAttempted = false;  // 至少嘗試過一次抓取
 let prevPrices = {};         // 上次抓取的價格，用於閃爍動畫
+
+// 企業債券清單（動態，localStorage 儲存，初始從 CORP_BONDS 載入）
+const CORP_BONDS_KEY = 'corp_bonds_v2';
+let CORP_BONDS = [];
+try {
+    const _cb = JSON.parse(localStorage.getItem(CORP_BONDS_KEY));
+    CORP_BONDS = (Array.isArray(_cb) && _cb.length > 0) ? _cb : JSON.parse(JSON.stringify(CORP_BONDS));
+} catch(_) {
+    CORP_BONDS = JSON.parse(JSON.stringify(CORP_BONDS));
+}
+function saveCorpBonds() {
+    localStorage.setItem(CORP_BONDS_KEY, JSON.stringify(CORP_BONDS));
+    scheduleCloudSync();
+}
 
 // 企業債手動報價：從 localStorage 讀取，key = ISIN，value = % of par
 const CORP_PRICES_KEY = 'corp_bond_prices_v1';
@@ -1042,7 +1117,7 @@ function calcTotalNTD() {
         const p = QUOTES[h.ticker]?.price ?? h.cost;
         t += p * h.shares * USD_TWD;
     });
-    CFG.corp_bonds.forEach(b => {
+    CORP_BONDS.forEach(b => {
         t += corpBondMarketValue(b) * USD_TWD;
     });
     return t;
@@ -1130,7 +1205,7 @@ function renderSummary() {
         totalCostNTD += h.cost * h.shares * USD_TWD;
         dailyNTD     += (q?.change ?? 0) * h.shares * USD_TWD;
     });
-    CFG.corp_bonds.forEach(b => {
+    CORP_BONDS.forEach(b => {
         totalCostNTD += corpBondCostValue(b) * USD_TWD;
         // OTC 債無法計算今日損益（無報價更新）
     });
@@ -1255,7 +1330,7 @@ function renderHeatmap() {
         const q = QUOTES[h.ticker];
         cells.push({ name: h.name, value: (q?.price ?? h.cost) * h.shares * USD_TWD, pct: q?.changePct ?? 0 });
     });
-    CFG.corp_bonds.forEach(b => {
+    CORP_BONDS.forEach(b => {
         cells.push({ name: b.issuer, value: corpBondMarketValue(b) * USD_TWD, pct: 0 });
     });
 
@@ -1714,8 +1789,9 @@ async function confirmAddUs() {
 function renderCorpBondTable() {
     const totalNTD = calcTotalNTD();
     let rows = '', totMV = 0, totCostUSD = 0, totRecvInt = 0, totPremium = 0;
+    let totAnnualCouponUSD = 0;
 
-    CFG.corp_bonds.forEach(b => {
+    CORP_BONDS.forEach((b, bidx) => {
         const curPct    = corpBondCurrentPrice(b);
         const face      = corpBondFaceTotal(b);
         const mv        = curPct / 100 * face;
@@ -1744,10 +1820,11 @@ function renderCorpBondTable() {
             ? `<span class="badge" style="background:rgba(248,81,73,0.15);color:var(--red)">設質</span>`
             : '';
 
-        totMV       += mv;
-        totCostUSD  += costUSD;
-        totRecvInt  += recvInt;
-        totPremium  += premiumUSD;
+        totMV              += mv;
+        totCostUSD         += costUSD;
+        totRecvInt         += recvInt;
+        totPremium         += premiumUSD;
+        totAnnualCouponUSD += corpBondAnnualCoupon(b);
 
         const premiumLabel = premiumPts >= 0
             ? `<div class="tbl-sub pos">溢 +${premiumPts.toFixed(2)} pts</div>`
@@ -1791,6 +1868,7 @@ function renderCorpBondTable() {
             <td>$${fmtP(mv, 0)}<div class="tbl-sub">≈ ${wan(mvNTD)}</div></td>
             <td>${wt.toFixed(1)}%</td>
             <td class="${cc(totalPnL)}" style="font-weight:700">${costUSD > 0 ? fmt(totalPnL / costUSD * 100, 2) + '%' : '—'}<div class="tbl-sub" style="font-weight:400">${fmt(totalPnL * USD_TWD, 0, '$')} NTD</div></td>
+            <td class="td-op"><button class="btn-del" onclick="deleteCorpBond(${bidx})" title="刪除此債券">×</button></td>
         </tr>`;
     });
 
@@ -1808,9 +1886,97 @@ function renderCorpBondTable() {
         <td>$${fmtP(totMV, 0)}<div class="tbl-sub">≈ ${wan(totMV * USD_TWD)}</div></td>
         <td>${(totalNTD > 0 ? totMV * USD_TWD / totalNTD * 100 : 0).toFixed(1)}%</td>
         <td class="${cc(totTotalPnL)}" style="font-weight:700">${totCostUSD > 0 ? fmt(totTotalPnL / totCostUSD * 100, 2) + '%' : '—'}<div class="tbl-sub" style="font-weight:400">${fmt(totTotalPnL * USD_TWD, 0, '$')} NTD</div></td>
+        <td></td>
     </tr>`;
 
     document.getElementById('corpBondBody').innerHTML = rows;
+
+    // 更新每月配息估算
+    const monthlyNTD = totAnnualCouponUSD / 12 * USD_TWD;
+    const el = document.getElementById('corpMonthlyIncome');
+    if (el) el.textContent = monthlyNTD > 0 ? `每月約 ${wan(monthlyNTD)} NTD` : '';
+}
+
+// ── Corp Bond CRUD ─────────────────────────────────────────────────────
+
+function showAddCorpModal() {
+    // 清空欄位
+    ['cb-label','cb-issuer','cb-isin','cb-maturity','cb-months'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    ['cb-coupon','cb-face','cb-qty','cb-cost','cb-costUSD'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    const pledgedEl = document.getElementById('cb-pledged');
+    if (pledgedEl) pledgedEl.checked = false;
+    const hint = document.getElementById('corpModalHint');
+    if (hint) hint.textContent = '';
+    document.getElementById('corpModal').style.display = 'flex';
+}
+
+function closeCorpModal() {
+    document.getElementById('corpModal').style.display = 'none';
+}
+
+function cbAutoCalcCost() {
+    const cost  = parseFloat(document.getElementById('cb-cost').value);
+    const face  = parseFloat(document.getElementById('cb-face').value);
+    const qty   = parseFloat(document.getElementById('cb-qty').value);
+    const usdEl = document.getElementById('cb-costUSD');
+    if (!isNaN(cost) && !isNaN(face) && !isNaN(qty)) {
+        usdEl.placeholder = `≈ $${(cost / 100 * face * qty).toLocaleString(undefined,{maximumFractionDigits:0})}`;
+    }
+}
+
+function confirmAddCorpBond() {
+    const hint = document.getElementById('corpModalHint');
+    const label    = document.getElementById('cb-label').value.trim();
+    const issuer   = document.getElementById('cb-issuer').value.trim();
+    const isin     = document.getElementById('cb-isin').value.trim().toUpperCase();
+    const coupon   = parseFloat(document.getElementById('cb-coupon').value);
+    const maturity = document.getElementById('cb-maturity').value;
+    const face     = parseFloat(document.getElementById('cb-face').value);
+    const qty      = parseFloat(document.getElementById('cb-qty').value);
+    const cost     = parseFloat(document.getElementById('cb-cost').value);
+    let   costUSD  = parseFloat(document.getElementById('cb-costUSD').value);
+    const months   = document.getElementById('cb-months').value.trim();
+    const pledged  = document.getElementById('cb-pledged').checked;
+
+    if (!label)               { hint.textContent = '⚠ 請填入顯示名稱'; return; }
+    if (!isin)                { hint.textContent = '⚠ 請填入 ISIN'; return; }
+    if (isNaN(coupon))        { hint.textContent = '⚠ 請填入票息率%'; return; }
+    if (!maturity)            { hint.textContent = '⚠ 請填入到期日'; return; }
+    if (isNaN(face) || face <= 0) { hint.textContent = '⚠ 請填入面額'; return; }
+    if (isNaN(qty) || qty <= 0)   { hint.textContent = '⚠ 請填入張數'; return; }
+    if (isNaN(cost) || cost <= 0) { hint.textContent = '⚠ 請填入買入均價%'; return; }
+
+    // 實際成本若未填，自動計算
+    if (isNaN(costUSD) || costUSD <= 0) costUSD = cost / 100 * face * qty;
+
+    // 配息月份解析
+    const couponMonths = months
+        ? months.split(',').map(s => parseInt(s.trim())).filter(n => n >= 1 && n <= 12)
+        : [];
+
+    CORP_BONDS.push({
+        label, issuer, isin, coupon, maturity,
+        faceValue: face, quantity: qty,
+        cost, costUSD,
+        couponMonths: couponMonths.length ? couponMonths : undefined,
+        pledged: pledged || undefined,
+    });
+    saveCorpBonds();
+    closeCorpModal();
+    renderAll();
+}
+
+function deleteCorpBond(idx) {
+    if (!confirm(`確定刪除「${CORP_BONDS[idx].label}」？`)) return;
+    CORP_BONDS.splice(idx, 1);
+    saveCorpBonds();
+    renderAll();
 }
 
 function onCorpPriceChange(input) {
@@ -1844,6 +2010,7 @@ function buildPayload() {
         _note: '投資損益追蹤器設定檔',
         exported_at: new Date().toISOString(),
         tw_holdings: TW_DATA, us_holdings: US_DATA,
+        corp_bonds: CORP_BONDS,
         corp_prices: corpPrices, corp_coupon_counts: corpCouponCounts,
         reserve: reserveData, loan: loanData, initial_capital: initialCapital,
     };
@@ -1852,6 +2019,7 @@ function buildPayload() {
 function applyData(d) {
     if (d.tw_holdings)        { TW_DATA = d.tw_holdings; saveTwData(); }
     if (d.us_holdings)        { US_DATA = d.us_holdings; saveUsData(); }
+    if (Array.isArray(d.corp_bonds) && d.corp_bonds.length > 0) { CORP_BONDS = d.corp_bonds; saveCorpBonds(); }
     if (d.corp_prices)        { corpPrices = d.corp_prices; saveCorpPrices(); }
     if (d.corp_coupon_counts) { corpCouponCounts = d.corp_coupon_counts; saveCorpCounts(); }
     if (d.reserve)            { reserveData = d.reserve; saveReserve(); }
