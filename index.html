@@ -513,6 +513,29 @@
             margin-left: 4px;
         }
 
+        /* ── PIN Screen ── */
+        #pinScreen {
+            position: fixed; inset: 0;
+            background: var(--bg);
+            z-index: 99999;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 18px;
+        }
+        #pinScreen h2 { color: var(--accent); font-size: 1.4rem; font-weight: 700; }
+        #pinScreen .pin-hint { color: var(--dim); font-size: 0.82rem; }
+        #pinInput {
+            font-size: 2rem; letter-spacing: 0.8rem; text-align: center;
+            background: var(--surface); border: 1px solid var(--border);
+            color: var(--text); padding: 12px 16px; border-radius: 10px;
+            width: 170px; outline: none; -webkit-text-security: disc;
+        }
+        #pinInput:focus { border-color: var(--accent); }
+        #pinError { color: var(--red); font-size: 0.85rem; min-height: 20px; }
+        @keyframes shake {
+            0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-6px)} 80%{transform:translateX(6px)}
+        }
+        .pin-shake { animation: shake 0.4s ease; }
+
         /* ── Responsive ── */
         @media (max-width: 480px) {
             body { padding: 10px; }
@@ -526,6 +549,21 @@
     </style>
 </head>
 <body>
+
+<!-- ─── PIN Screen ─── -->
+<div id="pinScreen">
+    <h2>🔐 投資損益追蹤</h2>
+    <div class="pin-hint">請輸入密碼（提示：生日）</div>
+    <input id="pinInput"
+        type="password"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        maxlength="4"
+        autocomplete="off"
+        placeholder="••••"
+        oninput="onPinInput(this.value)">
+    <div id="pinError"></div>
+</div>
 
 <!-- ─── Header ─── -->
 <div class="header">
@@ -2318,7 +2356,7 @@ function calcYTM(faceVal, pricePct, couponPct, yearsToMaturity) {
         let pv = 0;
         for (let t = 1; t <= n; t++) pv += coupon / Math.pow(1 + r, t);
         pv += faceVal / Math.pow(1 + r, n);
-        (pv > price ? lo : hi) = mid;
+        if (pv > price) lo = mid; else hi = mid;
     }
     return (lo + hi) / 2;
 }
@@ -2557,11 +2595,57 @@ async function doRefresh(force = false) {
     }
 }
 
-// 15 秒自動刷新（開盤時段才打 API，休市只重繪）
-setInterval(() => doRefresh(false), 15 * 1000);
+// ── PIN + 解密啟動 ────────────────────────────────────────────────────
 
-// 雲端同步初始化
-(async () => {
+// 加密後的憑證（AES-256-GCM，PBKDF2 金鑰，PIN = 生日）
+const ENC_TOKEN = 'OIbj4afxpHGB2FYJFYvHWRZLpjvzpOzliV+FJ08D7X4PZf9SGiQBTELwPW9/R1D3n8sFYChGbszcJG5Twx6AvxcAKMoud8t+SqayNRlGUMn4fZHx';
+const ENC_GIST  = 'hRnfNbLFdqak3eyaBtGx8HcbkZyYMuf6L2os8JJ5X9c01tA6oZgQl4dT8djdKzAHd66Kw0FHfvkort9DzCjuAUOxOuMNvDbrIRk0xQ==';
+
+async function decryptData(pin, encB64) {
+    const buf  = Uint8Array.from(atob(encB64), c => c.charCodeAt(0));
+    const salt = buf.slice(0, 16);
+    const iv   = buf.slice(16, 28);
+    const data = buf.slice(28);           // ciphertext + 16-byte auth tag
+    const km   = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveKey']);
+    const key  = await crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+        km, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
+    );
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+    return new TextDecoder().decode(plain);
+}
+
+async function onPinInput(val) {
+    if (val.length < 4) return;
+    const input = document.getElementById('pinInput');
+    const errEl = document.getElementById('pinError');
+    try {
+        const token  = await decryptData(val, ENC_TOKEN);
+        const gistId = await decryptData(val, ENC_GIST);
+        // 解密成功 → 設定憑證並啟動
+        cloudCfg = { token, gistId };
+        // 若 localStorage 有存過更新的 gistId 也一併取用
+        try {
+            const saved = JSON.parse(localStorage.getItem(CLOUD_KEY));
+            if (saved?.token === token && saved?.gistId) cloudCfg.gistId = saved.gistId;
+        } catch(_) {}
+        document.getElementById('pinScreen').style.display = 'none';
+        initApp();
+    } catch(_) {
+        // 解密失敗 = 密碼錯誤
+        errEl.textContent = '密碼錯誤，請重試';
+        input.value = '';
+        input.classList.add('pin-shake');
+        input.addEventListener('animationend', () => input.classList.remove('pin-shake'), { once: true });
+        setTimeout(() => { errEl.textContent = ''; }, 2000);
+        input.focus();
+    }
+}
+
+async function initApp() {
+    // 15 秒自動刷新
+    setInterval(() => doRefresh(false), 15 * 1000);
+    // 雲端同步：優先從 Gist 載入最新資料
     if (cloudCfg.token && cloudCfg.gistId) {
         setCloudStatus('syncing', '☁ 載入中…');
         const ok = await cloudLoad();
@@ -2574,9 +2658,13 @@ setInterval(() => doRefresh(false), 15 * 1000);
     } else if (cloudCfg.token) {
         setCloudStatus('synced', '☁ 已連線');
     }
-    // 首次載入
     doRefresh(true);
-})();
+}
+
+// 頁面載入後自動 focus PIN 輸入框（手機會彈出數字鍵盤）
+window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => document.getElementById('pinInput')?.focus(), 100);
+});
 </script>
 </body>
 </html>
