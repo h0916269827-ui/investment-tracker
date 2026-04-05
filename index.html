@@ -323,13 +323,18 @@
         .loan-amount {
             font-size: 0.9rem;
             font-weight: 700;
-            color: var(--red);
+            color: var(--green);
             cursor: pointer;
-            border-bottom: 1px dashed rgba(248,81,73,0.4);
+            border-bottom: 1px dashed rgba(63,185,80,0.4);
             min-width: 60px;
             text-align: right;
         }
-        .loan-amount:hover { border-color: var(--red); }
+        .loan-amount:hover { border-color: var(--green); }
+        .loan-amount.reserve-amt {
+            color: var(--red);
+            border-bottom-color: rgba(248,81,73,0.4);
+        }
+        .loan-amount.reserve-amt:hover { border-color: var(--red); }
         .loan-edit-input {
             background: var(--surface2);
             border: 1px solid var(--red);
@@ -366,6 +371,35 @@
         .tbl-input-wide { width: 100px; }
 
         /* ── Row action buttons ── */
+        .btn-excl {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--dim);
+            width: 36px; height: 22px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.65rem;
+            line-height: 1;
+            padding: 0;
+            display: block;
+            margin-bottom: 3px;
+            white-space: nowrap;
+        }
+        .btn-excl:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-excl.excl-off {
+            background: rgba(248,81,73,0.08);
+            border-color: rgba(248,81,73,0.3);
+            color: var(--red);
+        }
+        .excl-row td { opacity: 0.45; }
+        .excl-row td:last-child { opacity: 1; }
+
+        /* ── Price flash animation ── */
+        @keyframes flash-up   { 0%{background:rgba(248,81,73,0.25)} 100%{background:transparent} }
+        @keyframes flash-down { 0%{background:rgba(63,185,80,0.25)}  100%{background:transparent} }
+        .flash-up   { animation: flash-up   1.8s ease-out; }
+        .flash-down { animation: flash-down 1.8s ease-out; }
+
         .btn-del {
             background: rgba(248,81,73,0.08);
             border: 1px solid rgba(248,81,73,0.2);
@@ -595,7 +629,7 @@
                     <th>債券 / ISIN</th>
                     <th>買入成本 USD</th>
                     <th>買入均價%</th>
-                    <th>目前市價%<br><small style="font-weight:400;letter-spacing:0">(可修改)</small></th>
+                    <th>目前市價%</th>
                     <th>資本損益 USD</th>
                     <th><abbr title="每半年付息一次，點 ▲▼ 或直接輸入次數">配息次數</abbr></th>
                     <th>累計已收配息 USD<br><small style="font-weight:400;letter-spacing:0;color:var(--dim)">（次數×每期金額）</small></th>
@@ -722,6 +756,7 @@ let USD_TWD = CFG.usd_twd_fallback;
 let loading = false;
 let hasError = false;
 let fetchAttempted = false;  // 至少嘗試過一次抓取
+let prevPrices = {};         // 上次抓取的價格，用於閃爍動畫
 
 // 企業債手動報價：從 localStorage 讀取，key = ISIN，value = % of par
 const CORP_PRICES_KEY = 'corp_bond_prices_v1';
@@ -998,10 +1033,12 @@ function corpBondAnnualCoupon(b) {
 function calcTotalNTD() {
     let t = 0;
     TW_DATA.forEach(h => {
+        if (h.excluded) return;
         const p = QUOTES[h.ticker]?.price ?? h.cost;
         t += p * h.lots * 1000;
     });
     US_DATA.forEach(h => {
+        if (h.excluded) return;
         const p = QUOTES[h.ticker]?.price ?? h.cost;
         t += p * h.shares * USD_TWD;
     });
@@ -1081,12 +1118,14 @@ function renderSummary() {
     let dailyNTD      = 0;
 
     TW_DATA.forEach(h => {
+        if (h.excluded) return;
         const q = QUOTES[h.ticker];
         const s = h.lots * 1000;
         totalCostNTD += h.cost * s;
         dailyNTD     += (q?.change ?? 0) * s;
     });
     US_DATA.forEach(h => {
+        if (h.excluded) return;
         const q = QUOTES[h.ticker];
         totalCostNTD += h.cost * h.shares * USD_TWD;
         dailyNTD     += (q?.change ?? 0) * h.shares * USD_TWD;
@@ -1165,10 +1204,9 @@ function renderSummary() {
             <div class="loan-row">
                 <span class="loan-row-label">NTD</span>
                 <div class="loan-val-wrap">
-                    <span class="loan-amount" id="reserve-val-NTD"
+                    <span class="loan-amount reserve-amt" id="reserve-val-NTD"
                           onclick="startEditReserve('NTD')"
-                          title="點擊編輯準備金台幣"
-                          style="color:var(--green)">
+                          title="點擊編輯準備金台幣">
                         ${ntdR ? wan(ntdR) : '—'}
                     </span>
                 </div>
@@ -1176,10 +1214,9 @@ function renderSummary() {
             <div class="loan-row">
                 <span class="loan-row-label">USD</span>
                 <div class="loan-val-wrap">
-                    <span class="loan-amount" id="reserve-val-USD"
+                    <span class="loan-amount reserve-amt" id="reserve-val-USD"
                           onclick="startEditReserve('USD')"
-                          title="點擊編輯準備金美金"
-                          style="color:var(--green)">
+                          title="點擊編輯準備金美金">
                         ${usdR ? '$' + usdR.toLocaleString() : '—'}
                     </span>
                 </div>
@@ -1209,10 +1246,12 @@ function renderSummary() {
 function renderHeatmap() {
     const cells = [];
     TW_DATA.forEach(h => {
+        if (h.excluded) return;
         const q = QUOTES[h.ticker];
         cells.push({ name: h.name, value: (q?.price ?? h.cost) * h.lots * 1000, pct: q?.changePct ?? 0 });
     });
     US_DATA.forEach(h => {
+        if (h.excluded) return;
         const q = QUOTES[h.ticker];
         cells.push({ name: h.name, value: (q?.price ?? h.cost) * h.shares * USD_TWD, pct: q?.changePct ?? 0 });
     });
@@ -1275,7 +1314,8 @@ function buildTwRow(h, idx, totalNTD) {
     const afterT = twAfterTaxPnL(h, price);
     const wt     = totalNTD > 0 ? val / totalNTD * 100 : 0;
     const pnlPct = cost > 0 ? afterT / cost * 100 : 0;
-    return `<tr id="tw-row-${idx}">
+    const exclCls = h.excluded ? ' excl-row' : '';
+    return `<tr id="tw-row-${idx}"${exclCls ? ` class="${exclCls.trim()}"` : ''}>
         <td>
             <div class="tbl-name">
                 <span onclick="editTwName(${idx})" title="點擊修改名稱" style="cursor:pointer;border-bottom:1px dashed transparent" onmouseover="this.style.borderColor='var(--dim)'" onmouseout="this.style.borderColor='transparent'">${h.name}</span>
@@ -1303,7 +1343,10 @@ function buildTwRow(h, idx, totalNTD) {
         <td class="${cc(afterT)}">${q ? fmt(afterT, 0, '$') : '—'}</td>
         <td>${wt.toFixed(1)}%</td>
         <td class="${cc(pnlPct)}" style="font-weight:700">${fmt(pnlPct, 2)}%</td>
-        <td class="td-op"><button class="btn-del" onclick="deleteTwRow(${idx})" title="刪除此持股">×</button></td>
+        <td class="td-op">
+            <button class="btn-excl${h.excluded ? ' excl-off' : ''}" onclick="toggleTwExclude(${idx})" title="${h.excluded ? '目前排除，點擊計入' : '目前計入，點擊排除'}">${h.excluded ? '排除' : '計入'}</button>
+            <button class="btn-del" onclick="deleteTwRow(${idx})" title="刪除此持股">×</button>
+        </td>
     </tr>`;
 }
 
@@ -1404,6 +1447,14 @@ async function editUsTicker(idx) {
     US_DATA[idx].ticker = ticker;
     saveUsData();
     renderUsTable();
+    renderSummary();
+    renderHeatmap();
+}
+
+function toggleTwExclude(idx) {
+    TW_DATA[idx].excluded = !TW_DATA[idx].excluded;
+    saveTwData();
+    renderTwTable();
     renderSummary();
     renderHeatmap();
 }
@@ -1509,7 +1560,8 @@ function buildUsRow(h, idx, totalNTD) {
     const unreal = (price - h.cost) * h.shares;
     const wt     = totalNTD > 0 ? val * USD_TWD / totalNTD * 100 : 0;
     const pnlPct = h.cost > 0 ? (price - h.cost) / h.cost * 100 : 0;
-    return `<tr id="us-row-${idx}">
+    const exclClsUs = h.excluded ? 'excl-row' : '';
+    return `<tr id="us-row-${idx}"${exclClsUs ? ` class="${exclClsUs}"` : ''}>
         <td>
             <div class="tbl-name">
                 <span onclick="editUsName(${idx})" title="點擊修改名稱" style="cursor:pointer;border-bottom:1px dashed transparent" onmouseover="this.style.borderColor='var(--dim)'" onmouseout="this.style.borderColor='transparent'">${h.name}</span>
@@ -1536,7 +1588,10 @@ function buildUsRow(h, idx, totalNTD) {
         <td>${wan(val * USD_TWD)}</td>
         <td>${wt.toFixed(1)}%</td>
         <td class="${cc(pnlPct)}" style="font-weight:700">${fmt(pnlPct, 2)}%<div class="tbl-sub" style="font-weight:400">${fmt(unreal * USD_TWD, 0, '$')} NTD</div></td>
-        <td class="td-op"><button class="btn-del" onclick="deleteUsRow(${idx})" title="刪除此持股">×</button></td>
+        <td class="td-op">
+            <button class="btn-excl${h.excluded ? ' excl-off' : ''}" onclick="toggleUsExclude(${idx})" title="${h.excluded ? '目前排除，點擊計入' : '目前計入，點擊排除'}">${h.excluded ? '排除' : '計入'}</button>
+            <button class="btn-del" onclick="deleteUsRow(${idx})" title="刪除此持股">×</button>
+        </td>
     </tr>`;
 }
 
@@ -1576,6 +1631,14 @@ function saveUsField(idx, field, raw) {
     saveUsData();
     const totalNTD = calcTotalNTD();
     document.getElementById(`us-row-${idx}`).outerHTML = buildUsRow(US_DATA[idx], idx, totalNTD);
+    renderSummary();
+    renderHeatmap();
+}
+
+function toggleUsExclude(idx) {
+    US_DATA[idx].excluded = !US_DATA[idx].excluded;
+    saveUsData();
+    renderUsTable();
     renderSummary();
     renderHeatmap();
 }
@@ -1650,7 +1713,7 @@ async function confirmAddUs() {
 
 function renderCorpBondTable() {
     const totalNTD = calcTotalNTD();
-    let rows = '', totMV = 0, totCostUSD = 0, totRecvInt = 0;
+    let rows = '', totMV = 0, totCostUSD = 0, totRecvInt = 0, totPremium = 0;
 
     CFG.corp_bonds.forEach(b => {
         const curPct    = corpBondCurrentPrice(b);
@@ -1661,11 +1724,22 @@ function renderCorpBondTable() {
         const recvInt   = corpBondReceivedInt(b);       // 累計已收配息（由次數計算）
         const count     = getCouponCount(b);            // 已收次數
         const perPeriod = couponPerPeriod(b);           // 每期金額
-        const totalPnL  = capPnL + recvInt;             // 含息總損益
         const priceDiff = curPct - b.cost;              // 與買入均價的價差 pts
         const dtm       = daysToMaturity(b.maturity);
         const mvNTD     = mv * USD_TWD;
         const wt        = totalNTD > 0 ? mvNTD / totalNTD * 100 : 0;
+
+        // 溢價：買入均價超過面額的部分（到期必虧）
+        const premiumPts = b.cost - 100;                         // pts，正=溢，負=折
+        const premiumUSD = Math.max(0, premiumPts / 100 * face); // 溢價金額（折價時=0）
+
+        // 含息損益 = 資本損益 + 已收配息 − 溢價（預扣必損的溢價部分）
+        const totalPnL  = capPnL + recvInt - premiumUSD;
+
+        // 回溢損益平衡點：需收幾次配息才能回收溢價
+        const bepTotal  = premiumUSD > 0 && perPeriod > 0 ? Math.ceil(premiumUSD / perPeriod) : null;
+        const bepRemain = bepTotal !== null ? Math.max(0, bepTotal - count) : null;
+
         const pledgeTag = b.pledged
             ? `<span class="badge" style="background:rgba(248,81,73,0.15);color:var(--red)">設質</span>`
             : '';
@@ -1673,6 +1747,17 @@ function renderCorpBondTable() {
         totMV       += mv;
         totCostUSD  += costUSD;
         totRecvInt  += recvInt;
+        totPremium  += premiumUSD;
+
+        const premiumLabel = premiumPts >= 0
+            ? `<div class="tbl-sub pos">溢 +${premiumPts.toFixed(2)} pts</div>`
+            : `<div class="tbl-sub neg">折 ${premiumPts.toFixed(2)} pts</div>`;
+
+        const bepLabel = bepRemain !== null
+            ? (bepRemain > 0
+                ? `<div class="tbl-sub" style="margin-top:3px;color:var(--yellow)">再 ${bepRemain} 次回溢</div>`
+                : `<div class="tbl-sub" style="margin-top:3px;color:var(--red);font-weight:700">已回溢價</div>`)
+            : '';
 
         rows += `<tr>
             <td>
@@ -1683,7 +1768,7 @@ function renderCorpBondTable() {
                 <div>$${costUSD.toLocaleString()}</div>
                 <div class="tbl-sub">面額 $${face.toLocaleString()}</div>
             </td>
-            <td>${fmtP(b.cost, 2)}%</td>
+            <td>${fmtP(b.cost, 2)}%${premiumLabel}</td>
             <td>
                 <input class="price-input" type="number" step="0.01" min="0" max="200"
                        value="${fmtP(curPct, 2)}"
@@ -1699,7 +1784,7 @@ function renderCorpBondTable() {
                        onchange="onCouponCountChange(this)"
                        title="已收到幾次配息（每次 $${fmtP(perPeriod,2)}）">
                 <div class="tbl-sub" style="margin-top:2px">×$${fmtP(perPeriod,0)}</div>
-                ${couponMonthHint(b)}
+                ${couponMonthHint(b)}${bepLabel}
             </td>
             <td class="pos">+$${fmtP(recvInt, 0)}<div class="tbl-sub">≈ ${fmt(recvInt * USD_TWD, 0, '$')} NTD</div></td>
             <td class="${cc(totalPnL)}">${fmt(totalPnL, 0, '$')}<div class="tbl-sub">≈ ${fmt(totalPnL * USD_TWD, 0, '$')} NTD</div></td>
@@ -1710,7 +1795,7 @@ function renderCorpBondTable() {
     });
 
     const totCapPnL   = totMV - totCostUSD;
-    const totTotalPnL = totCapPnL + totRecvInt;
+    const totTotalPnL = totCapPnL + totRecvInt - totPremium;
     rows += `<tr class="tbl-total">
         <td>合計</td>
         <td>$${totCostUSD.toLocaleString()}</td>
@@ -1947,10 +2032,9 @@ function renderReserve() {
             <div class="loan-row">
                 <span class="loan-row-label">NTD</span>
                 <div class="loan-val-wrap">
-                    <span class="loan-amount" id="reserve-val-NTD"
+                    <span class="loan-amount reserve-amt" id="reserve-val-NTD"
                           onclick="startEditReserve('NTD')"
-                          title="點擊編輯準備金台幣"
-                          style="color:var(--green)">
+                          title="點擊編輯準備金台幣">
                         ${ntd ? wan(ntd) : '—'}
                     </span>
                 </div>
@@ -1958,10 +2042,9 @@ function renderReserve() {
             <div class="loan-row">
                 <span class="loan-row-label">USD</span>
                 <div class="loan-val-wrap">
-                    <span class="loan-amount" id="reserve-val-USD"
+                    <span class="loan-amount reserve-amt" id="reserve-val-USD"
                           onclick="startEditReserve('USD')"
-                          title="點擊編輯準備金美金"
-                          style="color:var(--green)">
+                          title="點擊編輯準備金美金">
                         ${usd ? '$' + usd.toLocaleString() : '—'}
                     </span>
                 </div>
@@ -1970,6 +2053,23 @@ function renderReserve() {
                 合計 ≈ ${wan(total)} NTD ｜ 佔總資產 ${grand > 0 ? (total/grand*100).toFixed(1) : '—'}%
             </div>
         </div>`;
+}
+
+// ── Price flash animation ─────────────────────────────────────────────
+
+function applyPriceFlash() {
+    const flash = (id, ticker) => {
+        const prev = prevPrices[ticker];
+        const curr = QUOTES[ticker]?.price;
+        if (curr == null || prev == null || curr === prev) return;
+        const row = document.getElementById(id);
+        if (!row) return;
+        row.classList.remove('flash-up', 'flash-down');
+        void row.offsetWidth; // 觸發 reflow，讓動畫可以重新播放
+        row.classList.add(curr > prev ? 'flash-up' : 'flash-down');
+    };
+    TW_DATA.forEach((h, i) => flash(`tw-row-${i}`, h.ticker));
+    US_DATA.forEach((h, i) => flash(`us-row-${i}`, h.ticker));
 }
 
 // ── Main ──────────────────────────────────────────────────────────────
@@ -2008,7 +2108,12 @@ async function doRefresh(force = false) {
     document.getElementById('lastUpdate').textContent = '更新中...';
     try {
         const needFetch = force || !fetchAttempted || anyMarketMaybeOpen();
-        if (needFetch) { fetchAttempted = true; await fetchAllQuotes(); }
+        if (needFetch) {
+            // 記住抓取前的舊價格
+            prevPrices = Object.fromEntries(Object.entries(QUOTES).map(([k, v]) => [k, v.price]));
+            fetchAttempted = true;
+            await fetchAllQuotes();
+        }
         // 新增表單開啟中：只更新卡片和熱力圖，不重建表格（避免清掉填到一半的表單）
         if (twAddVisible || usAddVisible) {
             renderSummary();
@@ -2018,6 +2123,7 @@ async function doRefresh(force = false) {
             document.getElementById('lastUpdate').textContent = `最後更新: ${now}`;
         } else {
             renderAll();
+            if (needFetch) applyPriceFlash();
         }
     } finally {
         loading = false;
