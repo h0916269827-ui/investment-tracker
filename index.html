@@ -583,7 +583,7 @@
     ⚠ 部分報價無法取得（市場休市或 API 限制），顯示最後快取資料。
 </div>
 <div class="notice notice-info" id="corpBondNotice">
-    📌 企業債券（JPM / STANLN / UBS）為 OTC 場外交易，請手動輸入目前價格（以 par 的 % 表示，例如 99.50）。價格已自動儲存於本機瀏覽器。
+    📌 企業債券（JPM / STANLN / UBS）為 OTC 場外交易，請手動輸入目前價格（以 par 的 % 表示，例如 99.50）。
 </div>
 
 <!-- ─── Summary Cards ─── -->
@@ -1894,7 +1894,7 @@ function renderCorpBondTable() {
     // 更新每月配息估算
     const monthlyNTD = totAnnualCouponUSD / 12 * USD_TWD;
     const el = document.getElementById('corpMonthlyIncome');
-    if (el) el.innerHTML = monthlyNTD > 0 ? `每月約 ${wan(monthlyNTD)} NTD <span style="font-size:0.68rem;color:var(--dim);font-weight:400">（未扣除質押利息）</span>` : '';
+    if (el) el.innerHTML = monthlyNTD > 0 ? `每月債息約 ${wan(monthlyNTD)} NTD <span style="font-size:0.68rem;color:var(--dim);font-weight:400">（未扣除質押利息）</span>` : '';
 }
 
 // ── Corp Bond CRUD ─────────────────────────────────────────────────────
