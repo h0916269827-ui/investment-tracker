@@ -924,11 +924,15 @@ let hasError = false;
 let fetchAttempted = false;  // 至少嘗試過一次抓取
 let prevPrices = {};         // 上次抓取的價格，用於閃爍動畫
 
-// 質押年利率（手動輸入，存 localStorage）
-const PLEDGE_RATE_KEY = 'pledge_rate_v1';
-let pledgeRate = 0;
-try { pledgeRate = parseFloat(localStorage.getItem(PLEDGE_RATE_KEY) || '0') || 0; } catch(_) {}
-function savePledgeRate() { localStorage.setItem(PLEDGE_RATE_KEY, String(pledgeRate)); }
+// 質押年利率 & 質押金額（手動輸入，存 localStorage）
+const PLEDGE_RATE_KEY   = 'pledge_rate_v1';
+const PLEDGE_AMOUNT_KEY = 'pledge_amount_v1';
+let pledgeRate   = 0;
+let pledgeAmount = 0; // USD
+try { pledgeRate   = parseFloat(localStorage.getItem(PLEDGE_RATE_KEY)   || '0') || 0; } catch(_) {}
+try { pledgeAmount = parseFloat(localStorage.getItem(PLEDGE_AMOUNT_KEY) || '0') || 0; } catch(_) {}
+function savePledgeRate()   { localStorage.setItem(PLEDGE_RATE_KEY,   String(pledgeRate));   scheduleCloudSync(); }
+function savePledgeAmount() { localStorage.setItem(PLEDGE_AMOUNT_KEY, String(pledgeAmount)); scheduleCloudSync(); }
 
 // 資產歷史快照（每日一筆，最多保留 365 天）
 const HISTORY_KEY = 'portfolio_history_v1';
@@ -2136,6 +2140,7 @@ function buildPayload() {
         corp_bonds: CORP_BONDS,
         corp_prices: corpPrices, corp_coupon_counts: corpCouponCounts,
         reserve: reserveData, loan: loanData, initial_capital: initialCapital,
+        pledge_rate: pledgeRate, pledge_amount: pledgeAmount,
     };
 }
 
@@ -2148,6 +2153,8 @@ function applyData(d) {
     if (d.reserve)            { reserveData = d.reserve; saveReserve(); }
     if (d.loan)               { loanData = d.loan; saveLoan(); }
     if (d.initial_capital != null) { initialCapital = parseFloat(d.initial_capital) || 0; saveInitialCapital(); }
+    if (d.pledge_rate   != null)  { pledgeRate   = parseFloat(d.pledge_rate)   || 0; savePledgeRate(); }
+    if (d.pledge_amount != null)  { pledgeAmount = parseFloat(d.pledge_amount) || 0; savePledgeAmount(); }
 }
 
 function setCloudStatus(state, text) {
@@ -2484,19 +2491,26 @@ function renderCouponCalendar() {
 
 // 月債息 vs 質押利息分析
 function renderPledgeAnalysis() {
-    const annualCouponUSD    = CORP_BONDS.reduce((s, b) => s + corpBondAnnualCoupon(b), 0);
-    const monthlyIncomeNTD   = annualCouponUSD / 12 * USD_TWD;
-    const pledgedFaceUSD     = CORP_BONDS.filter(b => b.pledged).reduce((s, b) => s + corpBondFaceTotal(b), 0);
-    const monthlyCostUSD     = pledgedFaceUSD * (pledgeRate / 100) / 12;
-    const monthlyCostNTD     = monthlyCostUSD * USD_TWD;
-    const netNTD             = monthlyIncomeNTD - monthlyCostNTD;
+    const annualCouponUSD  = CORP_BONDS.reduce((s, b) => s + corpBondAnnualCoupon(b), 0);
+    const monthlyIncomeNTD = annualCouponUSD / 12 * USD_TWD;
+    const monthlyCostUSD   = pledgeAmount * (pledgeRate / 100) / 12;
+    const monthlyCostNTD   = monthlyCostUSD * USD_TWD;
+    const netNTD           = monthlyIncomeNTD - monthlyCostNTD;
+
+    const inputStyle = `background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:5px;font-size:0.85rem;width:100px;outline:none`;
 
     document.getElementById('pledgeAnalysis').innerHTML = `
         <div class="pledge-stats">
             <div>
+                <div class="pledge-stat-label">質押金額 (USD)</div>
+                <input type="number" step="1000" min="0" value="${pledgeAmount}"
+                    style="${inputStyle}"
+                    onchange="pledgeAmount=parseFloat(this.value)||0;savePledgeAmount();renderPledgeAnalysis()">
+            </div>
+            <div>
                 <div class="pledge-stat-label">質押年利率 %</div>
                 <input type="number" step="0.01" min="0" value="${pledgeRate}"
-                    style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:5px;font-size:0.85rem;width:88px;outline:none"
+                    style="${inputStyle}"
                     onchange="pledgeRate=parseFloat(this.value)||0;savePledgeRate();renderPledgeAnalysis()">
             </div>
             <div class="pledge-stat">
@@ -2504,7 +2518,7 @@ function renderPledgeAnalysis() {
                 <div class="pledge-stat-val pos">≈ ${wan(monthlyIncomeNTD)} NTD</div>
             </div>
             <div class="pledge-stat">
-                <div class="pledge-stat-label">月質押利息 <small style="color:var(--dim)">(設質面額 $${(pledgedFaceUSD/1000).toFixed(0)}K)</small></div>
+                <div class="pledge-stat-label">月質押利息</div>
                 <div class="pledge-stat-val neg">≈ ${wan(monthlyCostNTD)} NTD</div>
             </div>
             <div class="pledge-stat" style="border-left:2px solid var(--border);padding-left:14px">
