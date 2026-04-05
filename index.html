@@ -190,6 +190,54 @@
         }
         .price-input:focus { outline: none; border-color: var(--accent); }
 
+        /* ── Cloud Sync ── */
+        .cloud-status {
+            font-size: 0.7rem;
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .cloud-status.synced  { border-color: rgba(63,185,80,0.5); color: var(--green); }
+        .cloud-status.syncing { border-color: rgba(88,166,255,0.5); color: var(--accent); }
+        .cloud-status.error   { border-color: rgba(248,81,73,0.5);  color: var(--red); }
+        .cloud-status.off     { color: var(--dim); }
+        .modal-overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.65);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 22px 24px;
+            width: min(420px, 92vw);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-box h3 { font-size: 1rem; margin-bottom: 14px; color: var(--accent); }
+        .modal-label { font-size: 0.72rem; color: var(--dim); margin: 10px 0 4px; }
+        .modal-input {
+            width: 100%;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 6px;
+            padding: 7px 10px;
+            font-size: 0.85rem;
+            outline: none;
+        }
+        .modal-input:focus { border-color: var(--accent); }
+        .modal-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+        .modal-hint { font-size: 0.68rem; color: var(--dim); margin-top: 10px; line-height: 1.6; }
+        .modal-hint a { color: var(--accent); }
+
         /* ── Reserve ── */
         .reserve-grid {
             display: grid;
@@ -394,9 +442,35 @@
     <h1>📊 投資損益追蹤</h1>
     <div class="header-right">
         <span class="last-update" id="lastUpdate">載入中...</span>
-        <button class="btn" onclick="exportSettings()" title="匯出所有設定為 JSON 檔，可備份或在其他裝置匯入">📤 匯出</button>
-        <button class="btn" onclick="importSettings()" title="從 JSON 檔匯入設定（覆蓋目前資料）">📥 匯入</button>
+        <button class="btn" onclick="exportSettings()" title="匯出所有設定為 JSON 檔">📤 匯出</button>
+        <button class="btn" onclick="importSettings()" title="從 JSON 檔匯入設定">📥 匯入</button>
+        <span class="cloud-status off" id="cloudStatus" onclick="showCloudModal()" title="雲端同步設定">☁ 未設定</span>
         <button class="btn" id="refreshBtn" onclick="doRefresh(true)">↻ 立即更新</button>
+    </div>
+</div>
+
+<!-- ─── Cloud Sync Modal ─── -->
+<div class="modal-overlay" id="cloudModal" onclick="if(event.target===this)closeCloudModal()">
+    <div class="modal-box">
+        <h3>☁ 雲端同步（GitHub Gist）</h3>
+        <div class="modal-label">GitHub Personal Access Token</div>
+        <input class="modal-input" id="cloudTokenInput" type="password" placeholder="ghp_xxxxxxxxxxxx">
+        <div class="modal-label">Gist ID <span style="color:var(--dim);font-size:0.65rem">（第一次留空，系統自動建立）</span></div>
+        <input class="modal-input" id="cloudGistInput" placeholder="自動填入後請記下此 ID">
+        <div class="modal-actions">
+            <button class="btn" onclick="connectCloud()" style="background:var(--accent);color:#000;border-color:var(--accent)">連線 / 儲存</button>
+            <button class="btn" onclick="cloudManualSync()">立即同步</button>
+            <button class="btn" onclick="disconnectCloud()" style="border-color:rgba(248,81,73,0.4);color:var(--red)">中斷連線</button>
+            <button class="btn" onclick="closeCloudModal()">關閉</button>
+        </div>
+        <div class="modal-hint" id="cloudModalHint">
+            📋 取得 Token 步驟：<br>
+            GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token<br>
+            勾選 <strong>gist</strong> 權限即可，其他不用勾。<br><br>
+            💡 第一台設備：填入 Token → 按「連線」→ 系統建立 Gist 並自動儲存。<br>
+            💡 第二台設備：填入同一個 Token + Gist ID → 按「連線」→ 自動載入資料。<br><br>
+            🔒 Token 僅存在本機 localStorage，不會上傳到任何伺服器。
+        </div>
     </div>
 </div>
 
@@ -435,7 +509,7 @@
     <div class="section-title" style="justify-content:space-between">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <span>🇹🇼</span> 台股
-            <small style="font-size:0.65rem;color:var(--dim)">手續費六折 ｜ 賣出 +證交稅 0.3% ｜ 張數/均成本可直接修改</small>
+            <small style="font-size:0.65rem;color:var(--dim)">張數/均成本可直接修改</small>
         </div>
         <button class="btn-add-row" onclick="showAddTwRow()">＋ 新增股票</button>
     </div>
@@ -449,8 +523,8 @@
                     <th>現價</th>
                     <th>今日漲跌%</th>
                     <th>今日損益 NTD</th>
-                    <th>未實現損益 NTD</th>
-                    <th><abbr title="假設今天全部賣出：扣手續費(六折)+證交稅0.3%後損益">稅後損益(賣)</abbr></th>
+                    <th>市值 NTD</th>
+                    <th><abbr title="賣出淨收入（×0.996672 係數）－買入成本">稅後損益(賣)</abbr></th>
                     <th>佔比</th>
                     <th><abbr title="(目前市值 − 含費成本) ÷ 含費成本">損益%</abbr></th>
                     <th class="th-op"></th>
@@ -646,6 +720,7 @@ try {
 
 function saveCorpPrices() {
     localStorage.setItem(CORP_PRICES_KEY, JSON.stringify(corpPrices));
+    scheduleCloudSync();
 }
 
 // 企業債配息次數：key = ISIN，value = 已收次數（整數）
@@ -656,6 +731,7 @@ try {
 } catch(_) {}
 function saveCorpCounts() {
     localStorage.setItem(CORP_COUNTS_KEY, JSON.stringify(corpCouponCounts));
+    scheduleCloudSync();
 }
 
 // 每期配息金額（半年付息一次）
@@ -720,7 +796,7 @@ let TW_DATA = (() => {
     } catch(_) {}
     return JSON.parse(JSON.stringify(CFG.tw));  // deep copy of defaults
 })();
-function saveTwData() { localStorage.setItem(TW_KEY, JSON.stringify(TW_DATA)); }
+function saveTwData() { localStorage.setItem(TW_KEY, JSON.stringify(TW_DATA)); scheduleCloudSync(); }
 
 // 美股持倉（可動態增刪改，存 localStorage）
 const US_KEY = 'us_holdings_v1';
@@ -731,13 +807,13 @@ let US_DATA = (() => {
     } catch(_) {}
     return JSON.parse(JSON.stringify(CFG.us));
 })();
-function saveUsData() { localStorage.setItem(US_KEY, JSON.stringify(US_DATA)); }
+function saveUsData() { localStorage.setItem(US_KEY, JSON.stringify(US_DATA)); scheduleCloudSync(); }
 
 // 原始資金（手動輸入，用於計算整體損益%）
 const INIT_CAP_KEY = 'initial_capital_v1';
 let initialCapital = 0;
 try { initialCapital = parseFloat(localStorage.getItem(INIT_CAP_KEY) || '0') || 0; } catch(_) {}
-function saveInitialCapital() { localStorage.setItem(INIT_CAP_KEY, String(initialCapital)); }
+function saveInitialCapital() { localStorage.setItem(INIT_CAP_KEY, String(initialCapital)); scheduleCloudSync(); }
 
 // 準備金（手動輸入，存 localStorage）
 const RESERVE_KEY = 'reserve_v1';
@@ -746,7 +822,7 @@ try {
     const _r = JSON.parse(localStorage.getItem(RESERVE_KEY));
     if (_r && typeof _r === 'object') reserveData = _r;
 } catch(_) {}
-function saveReserve() { localStorage.setItem(RESERVE_KEY, JSON.stringify(reserveData)); }
+function saveReserve() { localStorage.setItem(RESERVE_KEY, JSON.stringify(reserveData)); scheduleCloudSync(); }
 
 function startEditReserve(currency) {
     const el = document.getElementById(`reserve-val-${currency}`);
@@ -776,6 +852,7 @@ try {
 
 function saveLoan() {
     localStorage.setItem(LOAN_KEY, JSON.stringify(loanData));
+    scheduleCloudSync();
 }
 
 // 點擊借款金額 → 切換為 input 編輯模式
@@ -866,19 +943,11 @@ function hmColor(pct) {
 
 // ── Fee & Tax ─────────────────────────────────────────────────────────
 
-function twBuyCostTotal(costPerShare, shares) {
-    const fee = CFG.tw_fee_rate * CFG.tw_fee_discount;
-    return costPerShare * shares * (1 + fee);
-}
-
-function twSellNetTotal(price, shares) {
-    const fee = CFG.tw_fee_rate * CFG.tw_fee_discount;
-    return price * shares * (1 - fee - CFG.tw_tx_tax);
-}
+const TW_SELL_COEF = 0.996672; // 賣出係數（已含稅金與手續費）
 
 function twAfterTaxPnL(h, price) {
     const shares = h.lots * 1000;
-    return twSellNetTotal(price, shares) - twBuyCostTotal(h.cost, shares);
+    return price * shares * TW_SELL_COEF - h.cost * shares;
 }
 
 // ── Corp bond helpers ─────────────────────────────────────────────────
@@ -1002,7 +1071,7 @@ function renderSummary() {
     TW_DATA.forEach(h => {
         const q = QUOTES[h.ticker];
         const s = h.lots * 1000;
-        totalCostNTD += twBuyCostTotal(h.cost, s);
+        totalCostNTD += h.cost * s;
         dailyNTD     += (q?.change ?? 0) * s;
     });
     US_DATA.forEach(h => {
@@ -1189,12 +1258,11 @@ function buildTwRow(h, idx, totalNTD) {
     const price  = q?.price ?? h.cost;
     const shares = h.lots * 1000;
     const val    = price * shares;
-    const cost   = twBuyCostTotal(h.cost, shares);
+    const cost   = h.cost * shares;
     const daily  = (q?.change ?? 0) * shares;
-    const unreal = val - cost;
     const afterT = twAfterTaxPnL(h, price);
     const wt     = totalNTD > 0 ? val / totalNTD * 100 : 0;
-    const pnlPct = cost > 0 ? (val - cost) / cost * 100 : 0;
+    const pnlPct = cost > 0 ? afterT / cost * 100 : 0;
     return `<tr id="tw-row-${idx}">
         <td>
             <div class="tbl-name">
@@ -1219,7 +1287,7 @@ function buildTwRow(h, idx, totalNTD) {
         <td>${q ? fmtP(q.price) : (fetchAttempted ? '<span class="neu">—</span>' : '<span class="shimmer"></span>')}</td>
         <td class="${cc(q?.changePct)}">${q ? fmt(q.changePct, 2) + '%' : '—'}</td>
         <td class="${cc(daily)}">${q ? fmt(daily, 0, '$') : '—'}</td>
-        <td class="${cc(unreal)}">${fmt(unreal, 0, '$')}</td>
+        <td>${wan(val)}</td>
         <td class="${cc(afterT)}">${q ? fmt(afterT, 0, '$') : '—'}</td>
         <td>${wt.toFixed(1)}%</td>
         <td class="${cc(pnlPct)}" style="font-weight:700">${fmt(pnlPct, 2)}%</td>
@@ -1236,18 +1304,21 @@ function renderTwTable() {
         const price  = q?.price ?? h.cost;
         const shares = h.lots * 1000;
         totVal   += price * shares;
-        totCost  += twBuyCostTotal(h.cost, shares);
+        totCost  += h.cost * shares;
         totDaily += (q?.change ?? 0) * shares;
         rows     += buildTwRow(h, idx, totalNTD);
     });
 
-    const totUnreal  = totVal - totCost;
-    const totPnlPct  = totCost > 0 ? totUnreal / totCost * 100 : 0;
+    const totAfterT  = TW_DATA.reduce((s, h) => {
+        const p = (QUOTES[h.ticker]?.price ?? h.cost);
+        return s + twAfterTaxPnL(h, p);
+    }, 0);
+    const totPnlPct  = totCost > 0 ? totAfterT / totCost * 100 : 0;
     rows += `<tr class="tbl-total">
         <td colspan="5">合計</td>
         <td class="${cc(totDaily)}">${fmt(totDaily, 0, '$')}</td>
-        <td class="${cc(totUnreal)}">${fmt(totUnreal, 0, '$')}</td>
-        <td>—</td>
+        <td>${wan(totVal)}</td>
+        <td class="${cc(totAfterT)}">${fmt(totAfterT, 0, '$')}</td>
         <td>${(totalNTD > 0 ? totVal / totalNTD * 100 : 0).toFixed(1)}%</td>
         <td class="${cc(totPnlPct)}" style="font-weight:700">${fmt(totPnlPct, 2)}%</td>
         <td></td>
@@ -1664,20 +1735,154 @@ function onCouponCountChange(input) {
     renderSummary();
 }
 
+// ── 雲端同步（GitHub Gist）─────────────────────────────────────────────
+
+const CLOUD_KEY = 'cloud_sync_v1';
+let cloudCfg = { token: '', gistId: '' };
+try { cloudCfg = JSON.parse(localStorage.getItem(CLOUD_KEY) || '{}'); } catch(_) {}
+let cloudSyncTimer = null;
+
+function buildPayload() {
+    return {
+        _note: '投資損益追蹤器設定檔',
+        exported_at: new Date().toISOString(),
+        tw_holdings: TW_DATA, us_holdings: US_DATA,
+        corp_prices: corpPrices, corp_coupon_counts: corpCouponCounts,
+        reserve: reserveData, loan: loanData, initial_capital: initialCapital,
+    };
+}
+
+function applyData(d) {
+    if (d.tw_holdings)        { TW_DATA = d.tw_holdings; saveTwData(); }
+    if (d.us_holdings)        { US_DATA = d.us_holdings; saveUsData(); }
+    if (d.corp_prices)        { corpPrices = d.corp_prices; saveCorpPrices(); }
+    if (d.corp_coupon_counts) { corpCouponCounts = d.corp_coupon_counts; saveCorpCounts(); }
+    if (d.reserve)            { reserveData = d.reserve; saveReserve(); }
+    if (d.loan)               { loanData = d.loan; saveLoan(); }
+    if (d.initial_capital != null) { initialCapital = parseFloat(d.initial_capital) || 0; saveInitialCapital(); }
+}
+
+function setCloudStatus(state, text) {
+    const el = document.getElementById('cloudStatus');
+    if (!el) return;
+    el.className = `cloud-status ${state}`;
+    el.textContent = text;
+}
+
+async function gistRequest(method, gistId, body) {
+    const url = gistId
+        ? `https://api.github.com/gists/${gistId}`
+        : 'https://api.github.com/gists';
+    const resp = await fetch(url, {
+        method,
+        headers: {
+            'Authorization': `token ${cloudCfg.token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/vnd.github.v3+json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return resp.json();
+}
+
+async function cloudSave() {
+    if (!cloudCfg.token) return;
+    setCloudStatus('syncing', '☁ 同步中…');
+    try {
+        const body = {
+            description: '投資損益追蹤器',
+            public: false,
+            files: { 'portfolio.json': { content: JSON.stringify(buildPayload(), null, 2) } },
+        };
+        const data = await gistRequest(
+            cloudCfg.gistId ? 'PATCH' : 'POST',
+            cloudCfg.gistId, body
+        );
+        cloudCfg.gistId = data.id;
+        localStorage.setItem(CLOUD_KEY, JSON.stringify(cloudCfg));
+        const t = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+        setCloudStatus('synced', `☁ 已同步 ${t}`);
+    } catch(e) {
+        setCloudStatus('error', '☁ 同步失敗');
+    }
+}
+
+async function cloudLoad() {
+    if (!cloudCfg.token || !cloudCfg.gistId) return false;
+    try {
+        const data = await gistRequest('GET', cloudCfg.gistId);
+        const content = data.files?.['portfolio.json']?.content;
+        if (!content) return false;
+        applyData(JSON.parse(content));
+        return true;
+    } catch(_) { return false; }
+}
+
+function scheduleCloudSync() {
+    if (!cloudCfg.token) return;
+    clearTimeout(cloudSyncTimer);
+    cloudSyncTimer = setTimeout(cloudSave, 3000); // 靜止 3 秒後自動同步
+}
+
+function showCloudModal() {
+    document.getElementById('cloudTokenInput').value = cloudCfg.token || '';
+    document.getElementById('cloudGistInput').value  = cloudCfg.gistId || '';
+    document.getElementById('cloudModal').classList.add('open');
+}
+
+function closeCloudModal() {
+    document.getElementById('cloudModal').classList.remove('open');
+}
+
+async function connectCloud() {
+    const token  = document.getElementById('cloudTokenInput').value.trim();
+    const gistId = document.getElementById('cloudGistInput').value.trim();
+    if (!token) { alert('請輸入 GitHub Token'); return; }
+    cloudCfg = { token, gistId };
+    localStorage.setItem(CLOUD_KEY, JSON.stringify(cloudCfg));
+    document.getElementById('cloudModalHint').textContent = '連線中…';
+
+    if (gistId) {
+        // 有 Gist ID：載入雲端資料
+        const ok = await cloudLoad();
+        if (ok) {
+            renderAll();
+            document.getElementById('cloudGistInput').value = cloudCfg.gistId;
+            document.getElementById('cloudModalHint').textContent = '✅ 已從雲端載入資料！';
+            setCloudStatus('synced', '☁ 已連線');
+        } else {
+            document.getElementById('cloudModalHint').textContent = '❌ 載入失敗，請確認 Token 和 Gist ID 是否正確。';
+            setCloudStatus('error', '☁ 連線失敗');
+        }
+    } else {
+        // 無 Gist ID：建立新 Gist 並上傳
+        await cloudSave();
+        document.getElementById('cloudGistInput').value = cloudCfg.gistId;
+        document.getElementById('cloudModalHint').textContent =
+            `✅ 已建立 Gist！\nGist ID：${cloudCfg.gistId}\n\n其他裝置請填入此 ID + 同一個 Token 進行同步。`;
+        setCloudStatus('synced', '☁ 已連線');
+    }
+}
+
+async function cloudManualSync() {
+    await cloudSave();
+}
+
+function disconnectCloud() {
+    cloudCfg = { token: '', gistId: '' };
+    localStorage.removeItem(CLOUD_KEY);
+    setCloudStatus('off', '☁ 未設定');
+    document.getElementById('cloudTokenInput').value = '';
+    document.getElementById('cloudGistInput').value  = '';
+    document.getElementById('cloudModalHint').textContent = '已中斷連線。';
+}
+
 // ── 匯出 / 匯入設定 ───────────────────────────────────────────────────
 
 function exportSettings() {
-    const payload = {
-        _note          : '投資損益追蹤器設定檔，請勿手動修改結構',
-        exported_at    : new Date().toISOString(),
-        tw_holdings    : TW_DATA,
-        us_holdings    : US_DATA,
-        corp_prices    : corpPrices,
-        corp_coupon_counts: corpCouponCounts,
-        reserve        : reserveData,
-        loan           : loanData,
-        initial_capital: initialCapital,
-    };
+    const payload = buildPayload();
+    payload._note = '投資損益追蹤器設定檔，請勿手動修改結構';
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -1700,13 +1905,7 @@ function importSettings() {
         reader.onload = ev => {
             try {
                 const d = JSON.parse(ev.target.result);
-                if (d.tw_holdings)          { TW_DATA = d.tw_holdings;  saveTwData(); }
-                if (d.us_holdings)          { US_DATA = d.us_holdings;  saveUsData(); }
-                if (d.corp_prices)          { corpPrices = d.corp_prices; saveCorpPrices(); }
-                if (d.corp_coupon_counts)   { corpCouponCounts = d.corp_coupon_counts; saveCorpCounts(); }
-                if (d.reserve)              { reserveData = d.reserve; saveReserve(); }
-                if (d.loan)                 { loanData = d.loan; saveLoan(); }
-                if (d.initial_capital != null) { initialCapital = parseFloat(d.initial_capital) || 0; saveInitialCapital(); }
+                applyData(d);
                 renderAll();
                 alert('✅ 設定匯入成功！（' + (d.exported_at ? '備份時間：' + d.exported_at.slice(0,10) : '') + '）');
             } catch(_) {
@@ -1818,8 +2017,23 @@ async function doRefresh(force = false) {
 // 15 秒自動刷新（開盤時段才打 API，休市只重繪）
 setInterval(() => doRefresh(false), 15 * 1000);
 
-// 首次載入
-doRefresh(true);
+// 雲端同步初始化
+(async () => {
+    if (cloudCfg.token && cloudCfg.gistId) {
+        setCloudStatus('syncing', '☁ 載入中…');
+        const ok = await cloudLoad();
+        if (ok) {
+            const t = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+            setCloudStatus('synced', `☁ 已同步 ${t}`);
+        } else {
+            setCloudStatus('error', '☁ 載入失敗');
+        }
+    } else if (cloudCfg.token) {
+        setCloudStatus('synced', '☁ 已連線');
+    }
+    // 首次載入
+    doRefresh(true);
+})();
 </script>
 </body>
 </html>
