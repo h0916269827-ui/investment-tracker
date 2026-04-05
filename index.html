@@ -819,14 +819,14 @@ let hasError = false;
 let fetchAttempted = false;  // 至少嘗試過一次抓取
 let prevPrices = {};         // 上次抓取的價格，用於閃爍動畫
 
-// 企業債券清單（動態，localStorage 儲存，初始從 CORP_BONDS 載入）
+// 企業債券清單（動態，localStorage 儲存，初始從 CFG.corp_bonds 載入）
 const CORP_BONDS_KEY = 'corp_bonds_v2';
 let CORP_BONDS = [];
 try {
     const _cb = JSON.parse(localStorage.getItem(CORP_BONDS_KEY));
-    CORP_BONDS = (Array.isArray(_cb) && _cb.length > 0) ? _cb : JSON.parse(JSON.stringify(CORP_BONDS));
+    CORP_BONDS = (Array.isArray(_cb) && _cb.length > 0) ? _cb : JSON.parse(JSON.stringify(CFG.corp_bonds));
 } catch(_) {
-    CORP_BONDS = JSON.parse(JSON.stringify(CORP_BONDS));
+    CORP_BONDS = JSON.parse(JSON.stringify(CFG.corp_bonds));
 }
 function saveCorpBonds() {
     localStorage.setItem(CORP_BONDS_KEY, JSON.stringify(CORP_BONDS));
