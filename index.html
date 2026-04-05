@@ -114,6 +114,50 @@
         }
         .section-title span { color: var(--text); font-size: 0.95rem; }
 
+        /* ── Analytics Section ── */
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        @media (max-width: 640px) { .analytics-grid { grid-template-columns: 1fr; } }
+        .analytics-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px;
+        }
+        .analytics-title {
+            font-size: 0.68rem;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 10px;
+        }
+        /* Pie chart */
+        .pie-legend { display: flex; flex-direction: column; gap: 6px; }
+        .pie-legend-item { font-size: 0.78rem; display: flex; align-items: center; gap: 6px; }
+        .pie-legend-item span { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+        /* Coupon calendar */
+        .coupon-cal {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 6px;
+        }
+        @media (max-width: 480px) { .coupon-cal { grid-template-columns: repeat(4, 1fr); } }
+        .coupon-cal-cell {
+            border-radius: 6px;
+            padding: 8px 4px;
+            text-align: center;
+        }
+        .coupon-cal-month { font-size: 0.72rem; color: var(--dim); }
+        .coupon-cal-amt   { font-size: 0.78rem; font-weight: 600; margin-top: 3px; color: var(--red); }
+        /* Pledge analysis */
+        .pledge-stats { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+        .pledge-stat-label { font-size: 0.68rem; color: var(--dim); margin-bottom: 3px; }
+        .pledge-stat-val   { font-size: 0.95rem; font-weight: 700; }
+
         /* ── Heatmap ── */
         .heatmap-wrap {
             background: var(--surface);
@@ -595,6 +639,28 @@
     <div class="card"><div class="card-label">USD/TWD</div><div class="card-val"><span class="shimmer"></span></div></div>
 </div>
 
+<!-- ─── Analytics ─── -->
+<div class="section" id="analyticsSection">
+    <div class="analytics-grid">
+        <div class="analytics-panel">
+            <div class="analytics-title">📊 資產配置</div>
+            <div id="pieChartContainer"></div>
+        </div>
+        <div class="analytics-panel">
+            <div class="analytics-title">📈 資產走勢</div>
+            <div id="lineChartContainer"><div style="color:var(--dim);font-size:0.78rem;text-align:center;padding:40px 0">每日載入後自動累積走勢…</div></div>
+        </div>
+    </div>
+    <div class="analytics-panel" style="margin-bottom:10px">
+        <div class="analytics-title">📅 配息月份日曆</div>
+        <div id="couponCalendar"></div>
+    </div>
+    <div class="analytics-panel">
+        <div class="analytics-title">💰 月債息 vs 質押利息</div>
+        <div id="pledgeAnalysis"></div>
+    </div>
+</div>
+
 <!-- ─── Heatmap ─── -->
 <div class="section">
     <div class="section-title">
@@ -697,6 +763,7 @@
                     <th>目前市值 USD</th>
                     <th>佔比</th>
                     <th><abbr title="含息總損益 ÷ 買入成本">含息損益%</abbr></th>
+                    <th><abbr title="以買入均價計算的到期殖利率（年化）">YTM</abbr></th>
                     <th class="th-op"></th>
                 </tr>
             </thead>
@@ -818,6 +885,17 @@ let loading = false;
 let hasError = false;
 let fetchAttempted = false;  // 至少嘗試過一次抓取
 let prevPrices = {};         // 上次抓取的價格，用於閃爍動畫
+
+// 質押年利率（手動輸入，存 localStorage）
+const PLEDGE_RATE_KEY = 'pledge_rate_v1';
+let pledgeRate = 0;
+try { pledgeRate = parseFloat(localStorage.getItem(PLEDGE_RATE_KEY) || '0') || 0; } catch(_) {}
+function savePledgeRate() { localStorage.setItem(PLEDGE_RATE_KEY, String(pledgeRate)); }
+
+// 資產歷史快照（每日一筆，最多保留 365 天）
+const HISTORY_KEY = 'portfolio_history_v1';
+let portfolioHistory = [];
+try { portfolioHistory = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(_) {}
 
 // 企業債券清單（動態，localStorage 儲存，初始從 CFG.corp_bonds 載入）
 const CORP_BONDS_KEY = 'corp_bonds_v2';
@@ -1868,6 +1946,7 @@ function renderCorpBondTable() {
             <td>$${fmtP(mv, 0)}<div class="tbl-sub">≈ ${wan(mvNTD)}</div></td>
             <td>${wt.toFixed(1)}%</td>
             <td class="${cc(totalPnL)}" style="font-weight:700">${costUSD > 0 ? fmt(totalPnL / costUSD * 100, 2) + '%' : '—'}<div class="tbl-sub" style="font-weight:400">${fmt(totalPnL * USD_TWD, 0, '$')} NTD</div></td>
+            <td style="font-weight:700;color:var(--accent)">${(() => { const ytm = calcYTM(face, b.cost, b.coupon, dtm / 365); return ytm !== null ? ytm.toFixed(2) + '%' : '—'; })()}</td>
             <td class="td-op"><button class="btn-del" onclick="deleteCorpBond(${bidx})" title="刪除此債券">×</button></td>
         </tr>`;
     });
@@ -1886,6 +1965,7 @@ function renderCorpBondTable() {
         <td>$${fmtP(totMV, 0)}<div class="tbl-sub">≈ ${wan(totMV * USD_TWD)}</div></td>
         <td>${(totalNTD > 0 ? totMV * USD_TWD / totalNTD * 100 : 0).toFixed(1)}%</td>
         <td class="${cc(totTotalPnL)}" style="font-weight:700">${totCostUSD > 0 ? fmt(totTotalPnL / totCostUSD * 100, 2) + '%' : '—'}<div class="tbl-sub" style="font-weight:400">${fmt(totTotalPnL * USD_TWD, 0, '$')} NTD</div></td>
+        <td>—</td>
         <td></td>
     </tr>`;
 
@@ -2223,6 +2303,176 @@ function renderReserve() {
         </div>`;
 }
 
+// ── Analytics ─────────────────────────────────────────────────────────
+
+// 到期殖利率 YTM（二分法，半年付息）
+function calcYTM(faceVal, pricePct, couponPct, yearsToMaturity) {
+    if (yearsToMaturity <= 0.01) return null;
+    const price  = pricePct / 100 * faceVal;
+    const coupon = couponPct / 100 * faceVal / 2;   // 每半年
+    const n      = Math.max(1, Math.round(yearsToMaturity * 2));
+    let lo = -0.99, hi = 20;
+    for (let i = 0; i < 120; i++) {
+        const mid = (lo + hi) / 2;
+        const r   = mid / 200; // 半年利率
+        let pv = 0;
+        for (let t = 1; t <= n; t++) pv += coupon / Math.pow(1 + r, t);
+        pv += faceVal / Math.pow(1 + r, n);
+        (pv > price ? lo : hi) = mid;
+    }
+    return (lo + hi) / 2;
+}
+
+// 資產配置圓餅圖
+function renderPieChart() {
+    const twNTD   = TW_DATA.filter(h => !h.excluded).reduce((s, h) => s + (QUOTES[h.ticker]?.price ?? h.cost) * h.lots * 1000, 0);
+    const usNTD   = US_DATA.filter(h => !h.excluded).reduce((s, h) => s + (QUOTES[h.ticker]?.price ?? h.cost) * h.shares * USD_TWD, 0);
+    const bondNTD = CORP_BONDS.reduce((s, b) => s + corpBondMarketValue(b) * USD_TWD, 0);
+    const resNTD  = (reserveData.NTD || 0) + (reserveData.USD || 0) * USD_TWD;
+    const total   = twNTD + usNTD + bondNTD + resNTD;
+    if (total <= 0) { document.getElementById('pieChartContainer').innerHTML = ''; return; }
+
+    const slices = [
+        { label: '台股',   value: twNTD,   color: '#f85149' },
+        { label: '美股',   value: usNTD,   color: '#58a6ff' },
+        { label: '公司債', value: bondNTD, color: '#d29922' },
+        { label: '準備金', value: resNTD,  color: '#3fb950' },
+    ].filter(d => d.value > 0);
+
+    const cx = 80, cy = 80, R = 66, ri = 30;
+    let ang = -Math.PI / 2, paths = '', legend = '';
+    slices.forEach(d => {
+        const sweep = d.value / total * 2 * Math.PI;
+        const end   = ang + sweep;
+        const x1 = cx + R * Math.cos(ang),  y1 = cy + R * Math.sin(ang);
+        const x2 = cx + R * Math.cos(end),  y2 = cy + R * Math.sin(end);
+        const ix1 = cx + ri * Math.cos(ang), iy1 = cy + ri * Math.sin(ang);
+        const ix2 = cx + ri * Math.cos(end), iy2 = cy + ri * Math.sin(end);
+        const lg = sweep > Math.PI ? 1 : 0;
+        paths += `<path d="M${ix1.toFixed(1)},${iy1.toFixed(1)} L${x1.toFixed(1)},${y1.toFixed(1)} A${R},${R} 0 ${lg},1 ${x2.toFixed(1)},${y2.toFixed(1)} L${ix2.toFixed(1)},${iy2.toFixed(1)} A${ri},${ri} 0 ${lg},0 ${ix1.toFixed(1)},${iy1.toFixed(1)} Z" fill="${d.color}" opacity="0.85"/>`;
+        const pct = (d.value / total * 100).toFixed(1);
+        legend += `<div class="pie-legend-item"><span style="background:${d.color}"></span>${d.label}&nbsp;<strong>${pct}%</strong>&nbsp;<span style="color:var(--dim)">${wan(d.value)}</span></div>`;
+        ang = end;
+    });
+
+    document.getElementById('pieChartContainer').innerHTML = `
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <svg width="160" height="160" viewBox="0 0 160 160" style="flex-shrink:0">
+                ${paths}
+                <text x="${cx}" y="${cy-5}" text-anchor="middle" fill="var(--dim)" font-size="8">含準備金</text>
+                <text x="${cx}" y="${cy+7}" text-anchor="middle" fill="var(--text)" font-size="9" font-weight="bold">${wan(total)}</text>
+            </svg>
+            <div class="pie-legend">${legend}</div>
+        </div>`;
+}
+
+// 資產走勢折線圖
+function saveSnapshot() {
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
+    const val   = Math.round(calcTotalNTD() + (reserveData.NTD || 0) + (reserveData.USD || 0) * USD_TWD);
+    if (val <= 0) return;
+    const idx = portfolioHistory.findIndex(s => s.d === today);
+    if (idx >= 0) portfolioHistory[idx].v = val;
+    else portfolioHistory.push({ d: today, v: val });
+    portfolioHistory = portfolioHistory.slice(-365);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(portfolioHistory));
+}
+
+function renderLineChart() {
+    const el = document.getElementById('lineChartContainer');
+    const h  = portfolioHistory;
+    if (h.length < 2) {
+        el.innerHTML = '<div style="color:var(--dim);font-size:0.78rem;text-align:center;padding:36px 0">資料不足，每日載入後自動累積走勢…</div>';
+        return;
+    }
+    const W = 340, H = 120, PX = 28, PY = 14;
+    const vals = h.map(s => s.v);
+    const minV = Math.min(...vals), maxV = Math.max(...vals);
+    const range = maxV - minV || 1;
+    const toX = i  => PX + i / (h.length - 1) * (W - PX * 2);
+    const toY = v  => PY + (1 - (v - minV) / range) * (H - PY * 2);
+    const pts  = h.map((s, i) => `${toX(i).toFixed(1)},${toY(s.v).toFixed(1)}`).join(' ');
+    const last = h[h.length - 1];
+    const color = last.v >= h[0].v ? 'var(--red)' : 'var(--green)';
+    const area  = `${toX(0).toFixed(1)},${toY(h[0].v).toFixed(1)} ${pts} ${toX(h.length-1).toFixed(1)},${H-PY} ${toX(0).toFixed(1)},${H-PY}`;
+    el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+        </linearGradient></defs>
+        <polygon points="${area}" fill="url(#lg)"/>
+        <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="${toX(h.length-1).toFixed(1)}" cy="${toY(last.v).toFixed(1)}" r="3" fill="${color}"/>
+        <text x="${PX}" y="${H-2}" fill="var(--dim)" font-size="8">${h[0].d}</text>
+        <text x="${W-PX}" y="${H-2}" fill="var(--dim)" font-size="8" text-anchor="end">${last.d}</text>
+        <text x="${W-PX}" y="${Math.max(PY+10, toY(last.v)-4)}" fill="${color}" font-size="9" text-anchor="end">${wan(last.v)}</text>
+        <text x="${PX}" y="${toY(maxV)+10}" fill="var(--dim)" font-size="8">${wan(maxV)}</text>
+    </svg>`;
+}
+
+// 配息月份日曆
+function renderCouponCalendar() {
+    const income = Array(12).fill(0);
+    CORP_BONDS.forEach(b => {
+        if (!b.couponMonths?.length) return;
+        const perPeriod = corpBondAnnualCoupon(b) / b.couponMonths.length;
+        b.couponMonths.forEach(m => { income[m - 1] += perPeriod; });
+    });
+    const maxInc    = Math.max(...income);
+    const nowMonth  = new Date().getMonth();
+    const mLabels   = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+    let html = '<div class="coupon-cal">';
+    mLabels.forEach((m, i) => {
+        const ntd = income[i] * USD_TWD;
+        const isCur = i === nowMonth;
+        const intensity = maxInc > 0 ? income[i] / maxInc : 0;
+        const bg  = income[i] > 0 ? `rgba(248,81,73,${(0.08 + intensity * 0.35).toFixed(2)})` : 'transparent';
+        const brd = isCur ? '2px solid var(--accent)' : '1px solid var(--border)';
+        html += `<div class="coupon-cal-cell" style="background:${bg};border:${brd}">
+            <div class="coupon-cal-month">${m}</div>
+            <div class="coupon-cal-amt" style="${income[i] > 0 ? '' : 'color:var(--border)'}">
+                ${income[i] > 0 ? `≈ ${(ntd / 10000).toFixed(1)}萬` : '—'}
+            </div>
+        </div>`;
+    });
+    html += '</div>';
+    document.getElementById('couponCalendar').innerHTML = html;
+}
+
+// 月債息 vs 質押利息分析
+function renderPledgeAnalysis() {
+    const annualCouponUSD    = CORP_BONDS.reduce((s, b) => s + corpBondAnnualCoupon(b), 0);
+    const monthlyIncomeNTD   = annualCouponUSD / 12 * USD_TWD;
+    const pledgedFaceUSD     = CORP_BONDS.filter(b => b.pledged).reduce((s, b) => s + corpBondFaceTotal(b), 0);
+    const monthlyCostUSD     = pledgedFaceUSD * (pledgeRate / 100) / 12;
+    const monthlyCostNTD     = monthlyCostUSD * USD_TWD;
+    const netNTD             = monthlyIncomeNTD - monthlyCostNTD;
+
+    document.getElementById('pledgeAnalysis').innerHTML = `
+        <div class="pledge-stats">
+            <div>
+                <div class="pledge-stat-label">質押年利率 %</div>
+                <input type="number" step="0.01" min="0" value="${pledgeRate}"
+                    style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:5px;font-size:0.85rem;width:88px;outline:none"
+                    onchange="pledgeRate=parseFloat(this.value)||0;savePledgeRate();renderPledgeAnalysis()">
+            </div>
+            <div class="pledge-stat">
+                <div class="pledge-stat-label">月債息收入</div>
+                <div class="pledge-stat-val pos">≈ ${wan(monthlyIncomeNTD)} NTD</div>
+            </div>
+            <div class="pledge-stat">
+                <div class="pledge-stat-label">月質押利息 <small style="color:var(--dim)">(設質面額 $${(pledgedFaceUSD/1000).toFixed(0)}K)</small></div>
+                <div class="pledge-stat-val neg">≈ ${wan(monthlyCostNTD)} NTD</div>
+            </div>
+            <div class="pledge-stat" style="border-left:2px solid var(--border);padding-left:14px">
+                <div class="pledge-stat-label">月淨收益</div>
+                <div class="pledge-stat-val ${netNTD >= 0 ? 'pos' : 'neg'}" style="font-size:1.05rem">
+                    ${wan(netNTD)} NTD
+                </div>
+            </div>
+        </div>`;
+}
+
 // ── Price flash animation ─────────────────────────────────────────────
 
 function applyPriceFlash() {
@@ -2246,6 +2496,10 @@ function renderAll() {
     const sy = window.scrollY;   // 記住目前捲動位置
     renderSummary();
     renderHeatmap();
+    renderPieChart();
+    renderLineChart();
+    renderCouponCalendar();
+    renderPledgeAnalysis();
     renderTwTable();
     renderUsTable();
     renderCorpBondTable();
@@ -2291,7 +2545,10 @@ async function doRefresh(force = false) {
             document.getElementById('lastUpdate').textContent = `最後更新: ${now}`;
         } else {
             renderAll();
-            if (needFetch) applyPriceFlash();
+            if (needFetch) {
+                applyPriceFlash();
+                saveSnapshot();   // 每次抓到新報價就更新今日快照
+            }
         }
     } finally {
         loading = false;
