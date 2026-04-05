@@ -2493,8 +2493,7 @@ function renderCouponCalendar() {
 function renderPledgeAnalysis() {
     const annualCouponUSD  = CORP_BONDS.reduce((s, b) => s + corpBondAnnualCoupon(b), 0);
     const monthlyIncomeNTD = annualCouponUSD / 12 * USD_TWD;
-    const monthlyCostUSD   = pledgeAmount * (pledgeRate / 100) / 12;
-    const monthlyCostNTD   = monthlyCostUSD * USD_TWD;
+    const monthlyCostNTD   = pledgeAmount * (pledgeRate / 100) / 12;
     const netNTD           = monthlyIncomeNTD - monthlyCostNTD;
 
     const inputStyle = `background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:5px;font-size:0.85rem;width:100px;outline:none`;
@@ -2502,8 +2501,8 @@ function renderPledgeAnalysis() {
     document.getElementById('pledgeAnalysis').innerHTML = `
         <div class="pledge-stats">
             <div>
-                <div class="pledge-stat-label">質押金額 (USD)</div>
-                <input type="number" step="1000" min="0" value="${pledgeAmount}"
+                <div class="pledge-stat-label">質押金額 (NTD)</div>
+                <input type="number" step="100000" min="0" value="${pledgeAmount}"
                     style="${inputStyle}"
                     onchange="pledgeAmount=parseFloat(this.value)||0;savePledgeAmount();renderPledgeAnalysis()">
             </div>
