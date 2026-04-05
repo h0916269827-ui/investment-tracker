@@ -679,7 +679,7 @@
     <div class="section-title">
         <span>🏦</span> 企業債券（OTC）
         <small style="font-size:0.65rem;color:var(--dim)">手動輸入報價（% of par）｜ 含應計利息估算</small>
-        <span id="corpMonthlyIncome" style="margin-left:8px;font-size:0.68rem;color:var(--yellow)"></span>
+        <span id="corpMonthlyIncome" style="margin-left:8px;font-size:0.85rem;color:var(--yellow)"></span>
         <button class="btn-add-row" style="margin-left:auto" onclick="showAddCorpModal()">＋ 新增債券</button>
     </div>
     <div class="tbl-wrap">
@@ -1894,7 +1894,7 @@ function renderCorpBondTable() {
     // 更新每月配息估算
     const monthlyNTD = totAnnualCouponUSD / 12 * USD_TWD;
     const el = document.getElementById('corpMonthlyIncome');
-    if (el) el.textContent = monthlyNTD > 0 ? `每月約 ${wan(monthlyNTD)} NTD` : '';
+    if (el) el.innerHTML = monthlyNTD > 0 ? `每月約 ${wan(monthlyNTD)} NTD <span style="font-size:0.68rem;color:var(--dim);font-weight:400">（未扣除質押利息）</span>` : '';
 }
 
 // ── Corp Bond CRUD ─────────────────────────────────────────────────────
