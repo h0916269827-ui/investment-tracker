@@ -1380,7 +1380,6 @@ async function fetchAllQuotes() {
 function renderSummary() {
     const totalNTD    = calcTotalNTD();
     let totalCostNTD  = 0;
-    let dailyNTD      = 0;
 
     const fxChange = QUOTES['USDTWD=X']?.change ?? 0;
     let twDaily = 0, usDaily = 0, bondDaily = 0, reserveUsdDaily = 0;
