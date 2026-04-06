@@ -1658,6 +1658,7 @@ function toggleTwExclude(idx) {
 }
 
 function deleteTwRow(idx) {
+    if (!confirm(`確定刪除「${TW_DATA[idx].name || TW_DATA[idx].ticker}」？`)) return;
     TW_DATA.splice(idx, 1);
     saveTwData();
     renderTwTable();
@@ -1842,6 +1843,7 @@ function toggleUsExclude(idx) {
 }
 
 function deleteUsRow(idx) {
+    if (!confirm(`確定刪除「${US_DATA[idx].name || US_DATA[idx].ticker}」？`)) return;
     US_DATA.splice(idx, 1);
     saveUsData();
     renderUsTable();
@@ -2663,6 +2665,10 @@ async function onPinInput(val) {
 async function initApp() {
     // 15 秒自動刷新
     setInterval(() => doRefresh(false), 15 * 1000);
+    // 頁面從背景回到前景時立即重整（修正時間戳落後問題）
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') doRefresh(false);
+    });
     // 雲端同步：優先從 Gist 載入最新資料
     if (cloudCfg.token && cloudCfg.gistId) {
         setCloudStatus('syncing', '☁ 載入中…');
