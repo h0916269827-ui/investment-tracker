@@ -1382,29 +1382,34 @@ function renderSummary() {
     let totalCostNTD  = 0;
     let dailyNTD      = 0;
 
+    const fxChange = QUOTES['USDTWD=X']?.change ?? 0;
+    let twDaily = 0, usDaily = 0, bondDaily = 0, reserveUsdDaily = 0;
+
     TW_DATA.forEach(h => {
         if (h.excluded) return;
         const q = QUOTES[h.ticker];
         const s = h.lots * 1000;
         totalCostNTD += h.cost * s;
-        dailyNTD     += (q?.change ?? 0) * s;
+        twDaily      += (q?.change ?? 0) * s;
     });
     US_DATA.forEach(h => {
         if (h.excluded) return;
         const q = QUOTES[h.ticker];
         totalCostNTD += h.cost * h.shares * USD_TWD;
-        dailyNTD     += (q?.change ?? 0) * h.shares * USD_TWD;
+        usDaily      += (q?.change ?? 0) * h.shares * USD_TWD;
     });
     CORP_BONDS.forEach(b => {
         totalCostNTD += corpBondCostValue(b) * USD_TWD;
-        // OTC 債無法計算今日損益（無報價更新）
+        bondDaily    += fxChange * corpBondMarketValue(b);   // 匯兌損益
     });
 
-    const unrealized = totalNTD - totalCostNTD;
-    const reserveNTD = (reserveData.NTD || 0) + (reserveData.USD || 0) * USD_TWD;
-    const grandTotal = totalNTD + reserveNTD;
-    const dailyPct   = totalNTD > 0 ? dailyNTD / totalNTD * 100 : 0;
-    const unrPct     = totalCostNTD > 0 ? unrealized / totalCostNTD * 100 : 0;
+    const reserveNTD     = (reserveData.NTD || 0) + (reserveData.USD || 0) * USD_TWD;
+    reserveUsdDaily      = fxChange * (reserveData.USD || 0);
+    const grandTotal     = totalNTD + reserveNTD;
+    const dailyNTD       = twDaily + usDaily + bondDaily + reserveUsdDaily;
+    const unrealized     = totalNTD - totalCostNTD;
+    const dailyPct       = grandTotal > 0 ? dailyNTD / grandTotal * 100 : 0;
+    const unrPct         = totalCostNTD > 0 ? unrealized / totalCostNTD * 100 : 0;
 
     const loanNTD  = (loanData.NTD || 0) + (loanData.USD || 0) * USD_TWD;
     const netAsset = grandTotal - loanNTD;
@@ -1442,7 +1447,7 @@ function renderSummary() {
                     <span class="loan-amount" id="loan-val-NTD"
                           onclick="startEditLoan('NTD')"
                           title="點擊編輯借款台幣金額">
-                        ${loanData.NTD ? wan(loanData.NTD) : '—'}
+                        ${loanData.NTD ? wan(loanData.NTD) : '0'}
                     </span>
                 </div>
             </div>
@@ -1452,7 +1457,7 @@ function renderSummary() {
                     <span class="loan-amount" id="loan-val-USD"
                           onclick="startEditLoan('USD')"
                           title="點擊編輯借款美金金額">
-                        ${loanData.USD ? '$' + loanData.USD.toLocaleString() : '—'}
+                        ${loanData.USD ? '$' + loanData.USD.toLocaleString() : '$0'}
                     </span>
                 </div>
             </div>
@@ -1472,7 +1477,7 @@ function renderSummary() {
                     <span class="loan-amount reserve-amt" id="reserve-val-NTD"
                           onclick="startEditReserve('NTD')"
                           title="點擊編輯準備金台幣">
-                        ${ntdR ? wan(ntdR) : '—'}
+                        ${ntdR ? wan(ntdR) : '0'}
                     </span>
                 </div>
             </div>
@@ -1482,7 +1487,7 @@ function renderSummary() {
                     <span class="loan-amount reserve-amt" id="reserve-val-USD"
                           onclick="startEditReserve('USD')"
                           title="點擊編輯準備金美金">
-                        ${usdR ? '$' + usdR.toLocaleString() : '—'}
+                        ${usdR ? '$' + usdR.toLocaleString() : '$0'}
                     </span>
                 </div>
             </div>
@@ -1496,14 +1501,32 @@ function renderSummary() {
             <div class="card-sub">即時匯率</div>
         </div>`;
 
-    // 順序：總市值 | 整體損益% | 未實現損益 | 今日損益 | 含準備金總資產 | 借款 | 準備金 | 匯率
+    const dlC = cc(dailyNTD);
+    const hasFx = fxChange !== 0;
+    const dailyCard = `
+        <div class="card">
+            <div class="card-label">今日損益 (NTD)</div>
+            <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+                <div class="card-val ${dlC}" id="sv-daily">${fmt(dailyNTD, 0, '$')}</div>
+                <span class="${dlC}" style="font-size:0.78rem;font-weight:600">${fmt(dailyPct, 2)}%</span>
+            </div>
+            <div class="card-sub" style="margin-top:6px;font-size:0.63rem;line-height:1.8">
+                台股 <span class="${cc(twDaily)}">${fmt(twDaily, 0, '$')}</span> ｜
+                美股 <span class="${cc(usDaily)}">${fmt(usDaily, 0, '$')}</span><br>
+                公司債 <span class="${hasFx ? cc(bondDaily) : 'neu'}">${hasFx ? fmt(bondDaily, 0, '$') : '—'}</span> ｜
+                準備金 <span class="${hasFx ? cc(reserveUsdDaily) : 'neu'}">${hasFx ? fmt(reserveUsdDaily, 0, '$') : '—'}</span>
+                ${hasFx ? '' : '<span style="opacity:.55">（匯率待更新）</span>'}
+            </div>
+        </div>`;
+
+    // 順序：含準備金總資產 | 投資總市值 | 整體損益% | 未實現損益 | 今日損益 | 準備金 | 借款 | 匯率
     const prev = prevSummaryVals;
     document.getElementById('summaryCards').innerHTML =
         sc('含準備金總資產',      wan(grandTotal),         '準備金 ' + wan(reserveNTD), '', 'sv-grand') +
         sc('投資總市值 (NTD)',    wan(totalNTD),           fmtP(totalNTD) + ' NTD', '', 'sv-total') +
         returnCard +
         sc('未實現損益 (NTD)',    fmt(unrealized, 0, '$'), fmt(unrPct, 2) + '%', cc(unrealized), 'sv-unr') +
-        sc('今日損益 (NTD)',      fmt(dailyNTD, 0, '$'),   fmt(dailyPct, 2) + '%', cc(dailyNTD),  'sv-daily') +
+        dailyCard +
         reserveCard + loanCard + rateCard;
 
     // 卡片數值閃爍
@@ -2428,7 +2451,7 @@ function renderReserve() {
                     <span class="loan-amount reserve-amt" id="reserve-val-NTD"
                           onclick="startEditReserve('NTD')"
                           title="點擊編輯準備金台幣">
-                        ${ntd ? wan(ntd) : '—'}
+                        ${ntd ? wan(ntd) : '0'}
                     </span>
                 </div>
             </div>
@@ -2438,7 +2461,7 @@ function renderReserve() {
                     <span class="loan-amount reserve-amt" id="reserve-val-USD"
                           onclick="startEditReserve('USD')"
                           title="點擊編輯準備金美金">
-                        ${usd ? '$' + usd.toLocaleString() : '—'}
+                        ${usd ? '$' + usd.toLocaleString() : '$0'}
                     </span>
                 </div>
             </div>
