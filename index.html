@@ -1498,12 +1498,12 @@ function renderSummary() {
     // 順序：總市值 | 整體損益% | 未實現損益 | 今日損益 | 含準備金總資產 | 借款 | 準備金 | 匯率
     const prev = prevSummaryVals;
     document.getElementById('summaryCards').innerHTML =
-        sc('總市值 (NTD)',    wan(totalNTD),          fmtP(totalNTD) + ' NTD', '', 'sv-total') +
+        sc('含準備金總資產',      wan(grandTotal),         '準備金 ' + wan(reserveNTD), '', 'sv-grand') +
+        sc('投資總市值 (NTD)',    wan(totalNTD),           fmtP(totalNTD) + ' NTD', '', 'sv-total') +
         returnCard +
-        sc('未實現損益 (NTD)', fmt(unrealized, 0, '$'), fmt(unrPct, 2) + '%', cc(unrealized), 'sv-unr') +
-        sc('今日損益 (NTD)',   fmt(dailyNTD, 0, '$'),  fmt(dailyPct, 2) + '%', cc(dailyNTD),  'sv-daily') +
-        sc('含準備金總資產',   wan(grandTotal),         '準備金 ' + wan(reserveNTD), '', 'sv-grand') +
-        loanCard + reserveCard + rateCard;
+        sc('未實現損益 (NTD)',    fmt(unrealized, 0, '$'), fmt(unrPct, 2) + '%', cc(unrealized), 'sv-unr') +
+        sc('今日損益 (NTD)',      fmt(dailyNTD, 0, '$'),   fmt(dailyPct, 2) + '%', cc(dailyNTD),  'sv-daily') +
+        reserveCard + loanCard + rateCard;
 
     // 卡片數值閃爍
     const flashSv = (id, nv, ov) => {
