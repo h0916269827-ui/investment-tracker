@@ -817,7 +817,7 @@
 
 <!-- ─── Footer ─── -->
 <div style="text-align:center;color:var(--dim);font-size:0.68rem;padding:12px 0 4px">
-    每 15 秒自動更新 · 台股報價: Yahoo Finance · 美股報價: Twelve Data · 企業債手動輸入 · 僅供個人參考
+    每 2 分鐘自動更新 · 台股報價: Yahoo Finance · 美股報價: Twelve Data · 企業債手動輸入 · 僅供個人參考
 </div>
 
 <script>
@@ -1304,48 +1304,54 @@ async function fetchQuote(ticker) {
     } catch(_) { return null; }
 }
 
-// ── Twelve Data fetch ──────────────────────────────────────────────────
+// ── Twelve Data 批次查詢（美股 + 匯率合併一次 call）─────────────────────
 
-async function fetchTwelveQuote(ticker) {
-    if (!twelveApiKey) return null;
+async function fetchTwelveAll() {
+    if (!twelveApiKey) return;
+    const usTickers = US_DATA.map(h => h.ticker);
+    const symbols   = [...usTickers, 'USD/TWD'];
+    if (!symbols.length) return;
     try {
-        const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(ticker)}&apikey=${twelveApiKey}`;
-        const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
-        if (!r.ok) return null;
-        const q = await r.json();
-        if (q.status === 'error' || !q.close) return null;
-        const price = parseFloat(q.close);
-        const prev  = parseFloat(q.previous_close) || price;
-        const chg   = parseFloat(q.change) || (price - prev);
-        return {
-            price,
-            prevClose  : prev,
-            change     : chg,
-            changePct  : parseFloat(q.percent_change) || (prev ? chg / prev * 100 : 0),
-            currency   : q.currency || 'USD',
-            marketState: q.is_market_open ? 'REGULAR' : 'CLOSED',
-            shortName  : q.name ?? null,
+        const url  = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(symbols.join(','))}&apikey=${twelveApiKey}`;
+        const r    = await fetch(url, { signal: AbortSignal.timeout(12000) });
+        if (!r.ok) return;
+        const data = await r.json();
+
+        const parseQ = (q) => {
+            if (!q || q.status === 'error' || !q.close) return null;
+            const price = parseFloat(q.close);
+            const prev  = parseFloat(q.previous_close) || price;
+            const chg   = parseFloat(q.change) || (price - prev);
+            return { price, prevClose: prev, change: chg,
+                changePct: parseFloat(q.percent_change) || (prev ? chg / prev * 100 : 0),
+                currency: q.currency || 'USD',
+                marketState: q.is_market_open ? 'REGULAR' : 'CLOSED',
+                shortName: q.name ?? null };
         };
-    } catch(_) { return null; }
-}
 
-async function fetchTwelveForex() {
-    if (!twelveApiKey) return null;
-    try {
-        const url = `https://api.twelvedata.com/quote?symbol=USD/TWD&apikey=${twelveApiKey}`;
-        const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
-        if (!r.ok) return null;
-        const q = await r.json();
-        if (q.status === 'error' || !q.close) return null;
-        const price = parseFloat(q.close);
-        if (!price) return null;
-        return { price, prevClose: price, change: parseFloat(q.change) || 0, changePct: parseFloat(q.percent_change) || 0, currency: 'TWD', marketState: 'REGULAR', shortName: 'USD/TWD' };
-    } catch(_) { return null; }
+        // 單一 symbol 時直接回傳物件，多個時以 symbol 為 key
+        const multi = symbols.length > 1;
+        usTickers.forEach(t => {
+            const q = parseQ(multi ? data[t] : data);
+            if (q) QUOTES[t] = q;
+        });
+        const fxRaw = multi ? data['USD/TWD'] : (symbols[0] === 'USD/TWD' ? data : null);
+        if (fxRaw && !fxRaw.status) {
+            const price = parseFloat(fxRaw.close);
+            if (price) {
+                QUOTES['USDTWD=X'] = { price, prevClose: price,
+                    change: parseFloat(fxRaw.change) || 0,
+                    changePct: parseFloat(fxRaw.percent_change) || 0,
+                    currency: 'TWD', marketState: 'REGULAR', shortName: 'USD/TWD' };
+                USD_TWD = price;
+                localStorage.setItem('usd_twd_last', USD_TWD);
+            }
+        }
+    } catch(_) {}
 }
 
 async function fetchAllQuotes() {
     const twTickers = TW_DATA.map(h => h.ticker);
-    const usTickers = US_DATA.map(h => h.ticker);
     let err = 0;
 
     // 台股 → Yahoo Finance
@@ -1355,21 +1361,22 @@ async function fetchAllQuotes() {
         else err++;
     });
 
-    // 美股 → Twelve Data（有 key）或 Yahoo（無 key）
-    const usFetcher = twelveApiKey ? (t => fetchTwelveQuote(t)) : (t => fetchQuote(t));
-    const usResults = await Promise.allSettled(usTickers.map(usFetcher));
-    usResults.forEach((r, i) => {
-        if (r.status === 'fulfilled' && r.value) QUOTES[usTickers[i]] = r.value;
-        else err++;
-    });
-
-    // USD/TWD → Twelve Data 優先，失敗再用 Yahoo
-    let fxQuote = twelveApiKey ? await fetchTwelveForex() : null;
-    if (!fxQuote) fxQuote = await fetchQuote('USDTWD=X');
-    if (fxQuote?.price) {
-        QUOTES['USDTWD=X'] = fxQuote;
-        USD_TWD = fxQuote.price;
-        localStorage.setItem('usd_twd_last', USD_TWD);
+    // 美股 + 匯率 → Twelve Data 批次（1 call），無 key 則分開用 Yahoo
+    if (twelveApiKey) {
+        await fetchTwelveAll();
+    } else {
+        const usTickers = US_DATA.map(h => h.ticker);
+        const usResults = await Promise.allSettled(usTickers.map(t => fetchQuote(t)));
+        usResults.forEach((r, i) => {
+            if (r.status === 'fulfilled' && r.value) QUOTES[usTickers[i]] = r.value;
+            else err++;
+        });
+        const fxQuote = await fetchQuote('USDTWD=X');
+        if (fxQuote?.price) {
+            QUOTES['USDTWD=X'] = fxQuote;
+            USD_TWD = fxQuote.price;
+            localStorage.setItem('usd_twd_last', USD_TWD);
+        }
     }
 
     hasError = err > 0;
@@ -2767,7 +2774,7 @@ async function onPinInput(val) {
 
 async function initApp() {
     // 15 秒自動刷新
-    setInterval(() => doRefresh(false), 15 * 1000);
+    setInterval(() => doRefresh(false), 120 * 1000);
     // 頁面從背景回到前景時立即重整（修正時間戳落後問題）
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') doRefresh(false);
