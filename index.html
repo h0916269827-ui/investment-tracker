@@ -502,8 +502,8 @@
         }
         th.th-op { width: 32px; }
         td.td-op { text-align: center; }
-        th.th-drag { width: 18px; padding: 0 !important; }
-        td.td-drag { width: 18px; padding: 0 3px; text-align: center; vertical-align: middle; }
+        th.th-drag { width: 22px; min-width: 22px; padding: 0 !important; }
+        td.td-drag { width: 22px; min-width: 22px; padding: 0 3px; text-align: center; vertical-align: middle; }
         .drag-handle { cursor: grab; color: var(--dim); font-size: 0.85rem; user-select: none; display: inline-block; opacity: 0.5; }
         .drag-handle:hover { opacity: 1; }
         .drag-handle:active { cursor: grabbing; }
@@ -729,7 +729,7 @@
         <table>
             <thead>
                 <tr>
-                    <th class="th-drag"></th>
+                    <th class="th-drag">&nbsp;</th>
                     <th>名稱 / 代號</th>
                     <th>張數</th>
                     <th>均成本/股</th>
@@ -763,7 +763,7 @@
         <table>
             <thead>
                 <tr>
-                    <th class="th-drag"></th>
+                    <th class="th-drag">&nbsp;</th>
                     <th>名稱 / 代號</th>
                     <th>股數</th>
                     <th>均成本 USD</th>
@@ -1615,14 +1615,18 @@ function renderHeatmap() {
 // ── Drag-and-drop row reorder ─────────────────────────────────────────
 
 let _dragSrc = null;
+let _dragFromHandle = false;
 
 function _initDrag(tbodyId, arr, saveFn, renderFn) {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
+    // 記錄是否從把手開始拖（dragstart 的 e.target 是 tr，無法直接判斷）
+    tbody.addEventListener('mousedown', e => {
+        _dragFromHandle = !!e.target.closest('.drag-handle');
+    });
     tbody.addEventListener('dragstart', e => {
-        const handle = e.target.closest('.drag-handle');
-        const row    = e.target.closest('tr[draggable]');
-        if (!handle || !row) { e.preventDefault(); return; }
+        const row = e.target.closest('tr[draggable]');
+        if (!_dragFromHandle || !row) { e.preventDefault(); return; }
         _dragSrc = { el: row, id: tbodyId };
         e.dataTransfer.effectAllowed = 'move';
         setTimeout(() => row.classList.add('dragging'), 0);
