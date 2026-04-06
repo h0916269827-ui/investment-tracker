@@ -1621,7 +1621,7 @@ function buildTwRow(h, idx, totalNTD) {
             <input class="tbl-input" type="number" min="0" step="0.5" value="${h.lots}"
                    onchange="saveTwField(${idx},'lots',this.value)"
                    title="張數（1張=1000股）">
-            <div class="tbl-sub" style="margin-top:2px">${h.lots.toLocaleString()} 張 · ${shares.toLocaleString()} 股</div>
+            <div class="tbl-sub" style="margin-top:2px">${shares.toLocaleString()} 股</div>
         </td>
         <td>
             <input class="tbl-input" type="number" min="0" step="0.01" value="${h.cost}"
@@ -1868,7 +1868,6 @@ function buildUsRow(h, idx, totalNTD) {
             <input class="tbl-input" type="number" min="0" step="1" value="${h.shares}"
                    onchange="saveUsField(${idx},'shares',this.value)"
                    title="持股股數">
-            <div class="tbl-sub" style="margin-top:2px">${h.shares.toLocaleString()} 股</div>
         </td>
         <td>
             <input class="tbl-input tbl-input-wide" type="number" min="0" step="0.000001" value="${h.cost}"
@@ -2611,7 +2610,6 @@ function renderPledgeAnalysis() {
                 <input type="number" step="100000" min="0" value="${pledgeAmount}"
                     style="${inputStyle}"
                     onchange="pledgeAmount=parseFloat(this.value)||0;savePledgeAmount();renderPledgeAnalysis()">
-                <div style="font-size:0.65rem;color:var(--dim);margin-top:3px">${pledgeAmount.toLocaleString('zh-TW')}</div>
             </div>
             <div>
                 <div class="pledge-stat-label">質押年利率 %</div>
