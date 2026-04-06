@@ -502,10 +502,8 @@
         }
         th.th-op { width: 32px; }
         td.td-op { text-align: center; }
-        th.th-drag { width: 22px; min-width: 22px; padding: 0 !important; }
-        td.td-drag { width: 22px; min-width: 22px; padding: 0 3px; text-align: center; vertical-align: middle; }
-        .drag-handle { cursor: grab; color: var(--dim); font-size: 0.85rem; user-select: none; display: inline-block; opacity: 0.5; }
-        .drag-handle:hover { opacity: 1; }
+        .drag-handle { cursor: grab; color: var(--dim); font-size: 0.85rem; user-select: none; display: inline-block; opacity: 0.4; flex-shrink: 0; margin-top: 1px; }
+        .drag-handle:hover { opacity: 0.9; }
         .drag-handle:active { cursor: grabbing; }
         tr.drag-over td { background: rgba(88,166,255,0.08); outline: 1px dashed var(--accent); }
         tr.dragging { opacity: 0.35; }
@@ -729,7 +727,6 @@
         <table>
             <thead>
                 <tr>
-                    <th class="th-drag">&nbsp;</th>
                     <th>名稱 / 代號</th>
                     <th>張數</th>
                     <th>均成本/股</th>
@@ -744,7 +741,7 @@
                 </tr>
             </thead>
             <tbody id="twBody">
-                <tr><td colspan="12" style="text-align:center;padding:24px;color:var(--dim)"><span class="shimmer"></span></td></tr>
+                <tr><td colspan="11" style="text-align:center;padding:24px;color:var(--dim)"><span class="shimmer"></span></td></tr>
             </tbody>
         </table>
     </div>
@@ -763,7 +760,6 @@
         <table>
             <thead>
                 <tr>
-                    <th class="th-drag">&nbsp;</th>
                     <th>名稱 / 代號</th>
                     <th>股數</th>
                     <th>均成本 USD</th>
@@ -778,7 +774,7 @@
                 </tr>
             </thead>
             <tbody id="usBody">
-                <tr><td colspan="12" style="text-align:center;padding:24px;color:var(--dim)"><span class="shimmer"></span></td></tr>
+                <tr><td colspan="11" style="text-align:center;padding:24px;color:var(--dim)"><span class="shimmer"></span></td></tr>
             </tbody>
         </table>
     </div>
@@ -1614,53 +1610,133 @@ function renderHeatmap() {
 
 // ── Drag-and-drop row reorder ─────────────────────────────────────────
 
-let _dragSrc = null;
-let _dragFromHandle = false;
+// ── Drag-and-drop row reorder ─────────────────────────────────────────
 
-function _initDrag(tbodyId, arr, saveFn, renderFn) {
+let _twDragIdx = null;
+let _usDragIdx = null;
+
+function twRowDragStart(e, idx) {
+    _twDragIdx = idx;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => e.currentTarget.classList.add('dragging'), 0);
+}
+function twRowDragOver(e, idx) {
+    if (_twDragIdx === null) return;
+    e.preventDefault();
+    document.querySelectorAll('#twBody tr.drag-over').forEach(r => r.classList.remove('drag-over'));
+    if (_twDragIdx !== idx) e.currentTarget.classList.add('drag-over');
+}
+function twRowDrop(e, idx) {
+    e.preventDefault();
+    if (_twDragIdx === null || _twDragIdx === idx) return;
+    const item = TW_DATA.splice(_twDragIdx, 1)[0];
+    TW_DATA.splice(idx, 0, item);
+    _twDragIdx = null;
+    saveTwData();
+    renderTwTable();
+    renderSummary();
+    renderHeatmap();
+}
+function twRowDragEnd(e) {
+    document.querySelectorAll('#twBody tr').forEach(r => r.classList.remove('dragging', 'drag-over'));
+    e.currentTarget.draggable = false;
+    _twDragIdx = null;
+}
+
+function usRowDragStart(e, idx) {
+    _usDragIdx = idx;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => e.currentTarget.classList.add('dragging'), 0);
+}
+function usRowDragOver(e, idx) {
+    if (_usDragIdx === null) return;
+    e.preventDefault();
+    document.querySelectorAll('#usBody tr.drag-over').forEach(r => r.classList.remove('drag-over'));
+    if (_usDragIdx !== idx) e.currentTarget.classList.add('drag-over');
+}
+function usRowDrop(e, idx) {
+    e.preventDefault();
+    if (_usDragIdx === null || _usDragIdx === idx) return;
+    const item = US_DATA.splice(_usDragIdx, 1)[0];
+    US_DATA.splice(idx, 0, item);
+    _usDragIdx = null;
+    saveUsData();
+    renderUsTable();
+    renderSummary();
+    renderHeatmap();
+}
+function usRowDragEnd(e) {
+    document.querySelectorAll('#usBody tr').forEach(r => r.classList.remove('dragging', 'drag-over'));
+    e.currentTarget.draggable = false;
+    _usDragIdx = null;
+}
+
+// ── Touch drag（iOS Safari 不支援 HTML5 DnD，用 touch events 實作）────
+
+const _td = { active: false, type: null, fromIdx: null, toIdx: null, ghost: null, srcRow: null, offsetY: 0 };
+
+function touchDragStart(e, type, idx) {
+    e.preventDefault();
+    const row = e.currentTarget.closest('tr');
+    const touch = e.touches[0];
+    const rect = row.getBoundingClientRect();
+    _td.active = true; _td.type = type; _td.fromIdx = idx; _td.toIdx = idx;
+    _td.srcRow = row; _td.offsetY = touch.clientY - rect.top;
+
+    const arr = type === 'tw' ? TW_DATA : US_DATA;
+    const ghost = document.createElement('div');
+    ghost.textContent = '⠿  ' + (arr[idx].name || arr[idx].ticker);
+    ghost.style.cssText = `position:fixed;left:16px;right:16px;top:${rect.top}px;padding:10px 16px;background:var(--surface2);border:1px solid var(--accent);border-radius:8px;color:var(--text);font-size:0.85rem;pointer-events:none;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,0.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+    document.body.appendChild(ghost);
+    _td.ghost = ghost;
+    row.style.opacity = '0.35';
+}
+
+document.addEventListener('touchmove', e => {
+    if (!_td.active) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    if (_td.ghost) _td.ghost.style.top = (touch.clientY - _td.offsetY) + 'px';
+
+    _td.ghost.style.visibility = 'hidden';
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    _td.ghost.style.visibility = '';
+
+    const tbodyId = _td.type === 'tw' ? 'twBody' : 'usBody';
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
-    // 記錄是否從把手開始拖（dragstart 的 e.target 是 tr，無法直接判斷）
-    tbody.addEventListener('mousedown', e => {
-        _dragFromHandle = !!e.target.closest('.drag-handle');
-    });
-    tbody.addEventListener('dragstart', e => {
-        const row = e.target.closest('tr[draggable]');
-        if (!_dragFromHandle || !row) { e.preventDefault(); return; }
-        _dragSrc = { el: row, id: tbodyId };
-        e.dataTransfer.effectAllowed = 'move';
-        setTimeout(() => row.classList.add('dragging'), 0);
-    });
-    tbody.addEventListener('dragover', e => {
-        e.preventDefault();
-        const row = e.target.closest('tr[draggable]');
-        tbody.querySelectorAll('tr.drag-over').forEach(r => r.classList.remove('drag-over'));
-        if (row && _dragSrc && row !== _dragSrc.el && _dragSrc.id === tbodyId)
-            row.classList.add('drag-over');
-    });
-    tbody.addEventListener('dragleave', e => {
-        if (!tbody.contains(e.relatedTarget))
-            tbody.querySelectorAll('tr.drag-over').forEach(r => r.classList.remove('drag-over'));
-    });
-    tbody.addEventListener('drop', e => {
-        e.preventDefault();
-        if (!_dragSrc || _dragSrc.id !== tbodyId) return;
-        const row = e.target.closest('tr[draggable]');
-        if (!row || row === _dragSrc.el) return;
-        const from = parseInt(_dragSrc.el.dataset.idx);
-        const to   = parseInt(row.dataset.idx);
-        if (isNaN(from) || isNaN(to)) return;
-        const item = arr.splice(from, 1)[0];
-        arr.splice(to, 0, item);
-        saveFn();
-        renderFn();
-    });
-    tbody.addEventListener('dragend', () => {
-        tbody.querySelectorAll('tr[draggable]').forEach(r =>
-            r.classList.remove('dragging', 'drag-over'));
-        _dragSrc = null;
-    });
-}
+    tbody.querySelectorAll('tr.drag-over').forEach(r => r.classList.remove('drag-over'));
+    const targetRow = el && el.closest(`#${tbodyId} tr[data-idx]`);
+    if (targetRow && targetRow !== _td.srcRow) {
+        targetRow.classList.add('drag-over');
+        _td.toIdx = parseInt(targetRow.dataset.idx);
+    } else if (!targetRow) {
+        _td.toIdx = _td.fromIdx;
+    }
+}, { passive: false });
+
+document.addEventListener('touchend', () => {
+    if (!_td.active) return;
+    if (_td.ghost) { _td.ghost.remove(); _td.ghost = null; }
+    if (_td.srcRow) _td.srcRow.style.opacity = '';
+
+    const tbodyId = _td.type === 'tw' ? 'twBody' : 'usBody';
+    const tbody = document.getElementById(tbodyId);
+    if (tbody) tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+
+    if (_td.toIdx !== _td.fromIdx) {
+        if (_td.type === 'tw') {
+            const item = TW_DATA.splice(_td.fromIdx, 1)[0];
+            TW_DATA.splice(_td.toIdx, 0, item);
+            saveTwData(); renderTwTable(); renderSummary(); renderHeatmap();
+        } else {
+            const item = US_DATA.splice(_td.fromIdx, 1)[0];
+            US_DATA.splice(_td.toIdx, 0, item);
+            saveUsData(); renderUsTable(); renderSummary(); renderHeatmap();
+        }
+    }
+    _td.active = false; _td.type = null; _td.fromIdx = null; _td.toIdx = null; _td.srcRow = null;
+});
 
 // ── Render TW Table ───────────────────────────────────────────────────
 
@@ -1675,20 +1751,28 @@ function buildTwRow(h, idx, totalNTD) {
     const wt     = totalNTD > 0 ? val / totalNTD * 100 : 0;
     const pnlPct = cost > 0 ? afterT / cost * 100 : 0;
     const exclCls = h.excluded ? ' excl-row' : '';
-    return `<tr id="tw-row-${idx}" draggable="true" data-idx="${idx}"${exclCls ? ` class="${exclCls.trim()}"` : ''}>
-        <td class="td-drag"><span class="drag-handle">⠿</span></td>
+    return `<tr id="tw-row-${idx}" data-idx="${idx}"${exclCls ? ` class="${exclCls.trim()}"` : ''}
+        ondragstart="twRowDragStart(event,${idx})"
+        ondragover="twRowDragOver(event,${idx})"
+        ondrop="twRowDrop(event,${idx})"
+        ondragend="twRowDragEnd(event)">
         <td>
-            <div class="tbl-name">
-                <span onclick="editTwName(${idx})" title="點擊修改名稱" style="cursor:pointer;border-bottom:1px dashed transparent" onmouseover="this.style.borderColor='var(--dim)'" onmouseout="this.style.borderColor='transparent'">${h.name}</span>
-                ${marketBadge(q?.marketState)}
-            </div>
-            <div class="tbl-sub" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                <span onclick="editTwTicker(${idx})" title="點擊修改代號" style="cursor:pointer;border-bottom:1px dashed transparent" onmouseover="this.style.borderColor='var(--dim)'" onmouseout="this.style.borderColor='transparent'">${h.ticker}</span>
-                <span onclick="saveTwAccount(${idx},'${h.account === 'corp' ? 'personal' : 'corp'}')"
-                      style="cursor:pointer;font-size:0.58rem;padding:1px 5px;border-radius:3px;border:1px solid;${h.account === 'corp' ? 'border-color:var(--accent);color:var(--accent)' : 'border-color:var(--dim);color:var(--dim)'}"
-                      title="點擊切換個人/公司戶">
-                    ${h.account === 'corp' ? '公司' : '個人'}
-                </span>
+            <div style="display:flex;align-items:flex-start;gap:5px">
+                <span class="drag-handle" onmousedown="this.closest('tr').draggable=true" onmouseup="this.closest('tr').draggable=false" ontouchstart="touchDragStart(event,'tw',${idx})" title="拖曳排序">⠿</span>
+                <div>
+                <div class="tbl-name">
+                    <span onclick="editTwName(${idx})" title="點擊修改名稱" style="cursor:pointer;border-bottom:1px dashed transparent" onmouseover="this.style.borderColor='var(--dim)'" onmouseout="this.style.borderColor='transparent'">${h.name}</span>
+                    ${marketBadge(q?.marketState)}
+                </div>
+                <div class="tbl-sub" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                    <span onclick="editTwTicker(${idx})" title="點擊修改代號" style="cursor:pointer;border-bottom:1px dashed transparent" onmouseover="this.style.borderColor='var(--dim)'" onmouseout="this.style.borderColor='transparent'">${h.ticker}</span>
+                    <span onclick="saveTwAccount(${idx},'${h.account === 'corp' ? 'personal' : 'corp'}')"
+                          style="cursor:pointer;font-size:0.58rem;padding:1px 5px;border-radius:3px;border:1px solid;${h.account === 'corp' ? 'border-color:var(--accent);color:var(--accent)' : 'border-color:var(--dim);color:var(--dim)'}"
+                          title="點擊切換個人/公司戶">
+                        ${h.account === 'corp' ? '公司' : '個人'}
+                    </span>
+                </div>
+                </div>
             </div>
         </td>
         <td>
@@ -1736,7 +1820,7 @@ function renderTwTable() {
     }, 0);
     const totPnlPct  = totCost > 0 ? totAfterT / totCost * 100 : 0;
     rows += `<tr class="tbl-total">
-        <td colspan="6">合計</td>
+        <td colspan="5">合計</td>
         <td class="${cc(totDaily)}">${fmt(totDaily, 0)}</td>
         <td>${wan(totVal)}</td>
         <td class="${cc(totAfterT)}">${fmt(totAfterT, 0)}</td>
@@ -1937,15 +2021,23 @@ function buildUsRow(h, idx, totalNTD) {
     const wt     = totalNTD > 0 ? val * USD_TWD / totalNTD * 100 : 0;
     const pnlPct = h.cost > 0 ? (price - h.cost) / h.cost * 100 : 0;
     const exclClsUs = h.excluded ? 'excl-row' : '';
-    return `<tr id="us-row-${idx}" draggable="true" data-idx="${idx}"${exclClsUs ? ` class="${exclClsUs}"` : ''}>
-        <td class="td-drag"><span class="drag-handle">⠿</span></td>
+    return `<tr id="us-row-${idx}" data-idx="${idx}"${exclClsUs ? ` class="${exclClsUs}"` : ''}
+        ondragstart="usRowDragStart(event,${idx})"
+        ondragover="usRowDragOver(event,${idx})"
+        ondrop="usRowDrop(event,${idx})"
+        ondragend="usRowDragEnd(event)">
         <td>
-            <div class="tbl-name">
-                <span onclick="editUsName(${idx})" title="點擊修改名稱" style="cursor:pointer;border-bottom:1px dashed transparent" onmouseover="this.style.borderColor='var(--dim)'" onmouseout="this.style.borderColor='transparent'">${h.name}</span>
-                ${marketBadge(q?.marketState)}
-            </div>
-            <div class="tbl-sub">
-                <span onclick="editUsTicker(${idx})" title="點擊修改代號" style="cursor:pointer;border-bottom:1px dashed transparent" onmouseover="this.style.borderColor='var(--dim)'" onmouseout="this.style.borderColor='transparent'">${h.ticker}</span>
+            <div style="display:flex;align-items:flex-start;gap:5px">
+                <span class="drag-handle" onmousedown="this.closest('tr').draggable=true" onmouseup="this.closest('tr').draggable=false" ontouchstart="touchDragStart(event,'us',${idx})" title="拖曳排序">⠿</span>
+                <div>
+                <div class="tbl-name">
+                    <span onclick="editUsName(${idx})" title="點擊修改名稱" style="cursor:pointer;border-bottom:1px dashed transparent" onmouseover="this.style.borderColor='var(--dim)'" onmouseout="this.style.borderColor='transparent'">${h.name}</span>
+                    ${marketBadge(q?.marketState)}
+                </div>
+                <div class="tbl-sub">
+                    <span onclick="editUsTicker(${idx})" title="點擊修改代號" style="cursor:pointer;border-bottom:1px dashed transparent" onmouseover="this.style.borderColor='var(--dim)'" onmouseout="this.style.borderColor='transparent'">${h.ticker}</span>
+                </div>
+                </div>
             </div>
         </td>
         <td>
@@ -1989,7 +2081,7 @@ function renderUsTable() {
 
     const totPnlPct = totCostUSD > 0 ? totUnrUSD / totCostUSD * 100 : 0;
     rows += `<tr class="tbl-total">
-        <td colspan="6">合計</td>
+        <td colspan="5">合計</td>
         <td class="${cc(totDayUSD)}">${fmt(totDayUSD, 2, '$')}<div class="tbl-sub">${fmt(totDayUSD * USD_TWD, 0, '$')} NTD</div></td>
         <td class="${cc(totUnrUSD)}">${fmt(totUnrUSD, 2, '$')}<div class="tbl-sub">${fmt(totUnrUSD * USD_TWD, 0, '$')} NTD</div></td>
         <td>${wan(totValUSD * USD_TWD)}</td>
@@ -2619,21 +2711,40 @@ function saveSnapshot() {
 
 function renderLineChart() {
     const el = document.getElementById('lineChartContainer');
-    const h  = portfolioHistory;
-    if (h.length < 2) {
+    const full = portfolioHistory;
+    if (full.length < 2) {
         el.innerHTML = '<div style="color:var(--dim);font-size:0.78rem;text-align:center;padding:36px 0">資料不足，每日載入後自動累積走勢…</div>';
         return;
     }
-    const W = 340, H = 120, PX = 28, PY = 26;
+    const h   = full.slice(-5);  // 最近 5 天
+    const W = 340, H = 130, PX = 30, PY = 22, BOT = 26;
+    const chartH = H - PY - BOT;   // 可用繪圖高度
     const vals = h.map(s => s.v);
     const minV = Math.min(...vals), maxV = Math.max(...vals);
     const range = maxV - minV || 1;
-    const toX = i  => PX + i / (h.length - 1) * (W - PX * 2);
-    const toY = v  => PY + (1 - (v - minV) / range) * (H - PY * 2);
+    const toX = i => PX + (h.length < 2 ? (W - PX * 2) / 2 : i / (h.length - 1) * (W - PX * 2));
+    const toY = v => PY + (1 - (v - minV) / range) * chartH;
     const pts  = h.map((s, i) => `${toX(i).toFixed(1)},${toY(s.v).toFixed(1)}`).join(' ');
-    const last = h[h.length - 1];
+    const last  = h[h.length - 1];
     const color = last.v >= h[0].v ? 'var(--red)' : 'var(--green)';
-    const area  = `${toX(0).toFixed(1)},${toY(h[0].v).toFixed(1)} ${pts} ${toX(h.length-1).toFixed(1)},${H-PY} ${toX(0).toFixed(1)},${H-PY}`;
+    const area  = `${toX(0)},${toY(h[0].v)} ${pts} ${toX(h.length-1)},${H-BOT} ${toX(0)},${H-BOT}`;
+
+    let dots = '', labels = '';
+    h.forEach((s, i) => {
+        const x = toX(i), y = toY(s.v);
+        const isFirst = i === 0, isLast = i === h.length - 1;
+        const anchor  = isFirst ? 'start' : isLast ? 'end' : 'middle';
+        const valCol  = isLast ? color : 'var(--dim)';
+        // 節點圓點
+        dots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${isLast ? 3.5 : 2.5}" fill="${valCol}"/>`;
+        // 數值標籤（節點上方；若太靠近頂部則改下方）
+        const lblY = y - 6 < PY + 8 ? y + 12 : y - 6;
+        dots += `<text x="${x.toFixed(1)}" y="${lblY.toFixed(1)}" fill="${valCol}" font-size="${isLast ? 7.5 : 6.5}" text-anchor="${anchor}" font-weight="${isLast ? 600 : 400}">${wan(s.v)}</text>`;
+        // 日期標籤（底部，只顯示 MM-DD）
+        const dateStr = s.d.length >= 10 ? s.d.slice(5) : s.d;
+        labels += `<text x="${x.toFixed(1)}" y="${H - 5}" fill="var(--dim)" font-size="6.5" text-anchor="${anchor}">${dateStr}</text>`;
+    });
+
     el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
         <defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stop-color="${color}" stop-opacity="0.25"/>
@@ -2641,11 +2752,7 @@ function renderLineChart() {
         </linearGradient></defs>
         <polygon points="${area}" fill="url(#lg)"/>
         <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>
-        <circle cx="${toX(h.length-1).toFixed(1)}" cy="${toY(last.v).toFixed(1)}" r="3" fill="${color}"/>
-        <text x="${PX}" y="${H-14}" fill="var(--dim)" font-size="7.5">${wan(h[0].v)}</text>
-        <text x="${PX}" y="${H-5}" fill="var(--dim)" font-size="7">${h[0].d}</text>
-        <text x="${W-PX}" y="${H-14}" fill="${color}" font-size="7.5" text-anchor="end">${wan(last.v)}</text>
-        <text x="${W-PX}" y="${H-5}" fill="var(--dim)" font-size="7" text-anchor="end">${last.d}</text>
+        ${dots}${labels}
     </svg>`;
 }
 
@@ -2850,9 +2957,6 @@ async function onPinInput(val) {
 }
 
 async function initApp() {
-    // 拖曳排序初始化（只需一次，事件委派在 tbody 上，innerHTML 更新後仍有效）
-    _initDrag('twBody', TW_DATA, saveTwData, () => { renderTwTable(); renderSummary(); renderHeatmap(); });
-    _initDrag('usBody', US_DATA, saveUsData, () => { renderUsTable(); renderSummary(); renderHeatmap(); });
     // 15 秒自動刷新
     setInterval(() => doRefresh(false), 120 * 1000);
     // 頁面從背景回到前景時立即重整（修正時間戳落後問題）
