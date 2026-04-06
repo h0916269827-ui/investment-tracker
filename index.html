@@ -585,7 +585,12 @@
         <input class="modal-input" id="cloudTokenInput" type="password" placeholder="ghp_xxxxxxxxxxxx">
         <div class="modal-label">Gist ID <span style="color:var(--dim);font-size:0.65rem">（第一次留空，系統自動建立）</span></div>
         <input class="modal-input" id="cloudGistInput" placeholder="自動填入後請記下此 ID">
-        <div class="modal-actions">
+        <div class="modal-label" style="margin-top:14px">FMP API Key <span style="color:var(--dim);font-size:0.65rem">（美股 / 匯率報價，<a href="https://financialmodelingprep.com" target="_blank" style="color:var(--accent)">financialmodelingprep.com</a> 免費申請）</span></div>
+        <div style="display:flex;gap:6px;align-items:center">
+            <input class="modal-input" id="fmpKeyInput" type="password" placeholder="貼入 API Key" style="flex:1;margin-bottom:0">
+            <button class="btn" onclick="saveFmpKeyFromModal()" style="white-space:nowrap;padding:6px 12px">儲存</button>
+        </div>
+        <div class="modal-actions" style="margin-top:14px">
             <button class="btn" onclick="connectCloud()" style="background:var(--accent);color:#000;border-color:var(--accent)">連線 / 儲存</button>
             <button class="btn" onclick="cloudManualSync()">立即同步</button>
             <button class="btn" onclick="disconnectCloud()" style="border-color:rgba(248,81,73,0.4);color:var(--red)">中斷連線</button>
@@ -923,6 +928,12 @@ let loading = false;
 let hasError = false;
 let fetchAttempted = false;  // 至少嘗試過一次抓取
 let prevPrices = {};         // 上次抓取的價格，用於閃爍動畫
+
+// FMP API Key（Financial Modeling Prep，美股報價用）
+const FMP_KEY_STORAGE = 'fmp_api_key';
+let fmpApiKey = '';
+try { fmpApiKey = localStorage.getItem(FMP_KEY_STORAGE) || ''; } catch(_) {}
+function saveFmpKey(key) { fmpApiKey = key; localStorage.setItem(FMP_KEY_STORAGE, key); }
 
 // 質押年利率 & 質押金額（手動輸入，存 localStorage）
 const PLEDGE_RATE_KEY   = 'pledge_rate_v1';
@@ -1291,26 +1302,76 @@ async function fetchQuote(ticker) {
     } catch(_) { return null; }
 }
 
-async function fetchAllQuotes() {
-    const tickers = [
-        ...TW_DATA.map(h => h.ticker),
-        ...US_DATA.map(h => h.ticker),
-        'USDTWD=X',
-    ];
-    if (!tickers.length) return;
+// ── Financial Modeling Prep fetch ─────────────────────────────────────
 
-    const results = await Promise.allSettled(tickers.map(t => fetchQuote(t)));
+async function fetchFmpQuote(ticker) {
+    if (!fmpApiKey) return null;
+    try {
+        const url = `https://financialmodelingprep.com/api/v3/quote/${encodeURIComponent(ticker)}?apikey=${fmpApiKey}`;
+        const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+        if (!r.ok) return null;
+        const data = await r.json();
+        const q = Array.isArray(data) ? data[0] : null;
+        if (!q || !q.price) return null;
+        const prev = q.previousClose ?? q.price;
+        const chg  = q.change ?? (q.price - prev);
+        return {
+            price     : q.price,
+            prevClose : prev,
+            change    : chg,
+            changePct : q.changesPercentage ?? (prev ? chg / prev * 100 : 0),
+            currency  : q.currency || 'USD',
+            marketState: 'REGULAR',
+            shortName : q.name ?? null,
+        };
+    } catch(_) { return null; }
+}
+
+async function fetchFmpForex() {
+    if (!fmpApiKey) return null;
+    try {
+        const url = `https://financialmodelingprep.com/api/v3/fx/USDTWD?apikey=${fmpApiKey}`;
+        const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+        if (!r.ok) return null;
+        const data = await r.json();
+        const q = Array.isArray(data) ? data[0] : null;
+        if (!q) return null;
+        const price = parseFloat(q.ask) || parseFloat(q.bid) || null;
+        if (!price) return null;
+        return { price, prevClose: price, change: q.changes ?? 0, changePct: 0, currency: 'TWD', marketState: 'REGULAR', shortName: 'USD/TWD' };
+    } catch(_) { return null; }
+}
+
+async function fetchAllQuotes() {
+    const twTickers = TW_DATA.map(h => h.ticker);
+    const usTickers = US_DATA.map(h => h.ticker);
     let err = 0;
-    results.forEach((r, i) => {
-        if (r.status === 'fulfilled' && r.value) QUOTES[tickers[i]] = r.value;
+
+    // 台股 → Yahoo Finance
+    const twResults = await Promise.allSettled(twTickers.map(t => fetchQuote(t)));
+    twResults.forEach((r, i) => {
+        if (r.status === 'fulfilled' && r.value) QUOTES[twTickers[i]] = r.value;
         else err++;
     });
-    hasError = err > 0;
 
-    if (QUOTES['USDTWD=X']?.price) {
-        USD_TWD = QUOTES['USDTWD=X'].price;
+    // 美股 → FMP（有 key）或 Yahoo（無 key）
+    const usFetcher = fmpApiKey ? (t => fetchFmpQuote(t)) : (t => fetchQuote(t));
+    const usResults = await Promise.allSettled(usTickers.map(usFetcher));
+    usResults.forEach((r, i) => {
+        if (r.status === 'fulfilled' && r.value) QUOTES[usTickers[i]] = r.value;
+        else err++;
+    });
+
+    // USD/TWD → FMP forex 優先，失敗再用 Yahoo
+    let fxQuote = fmpApiKey ? await fetchFmpForex() : null;
+    if (!fxQuote) fxQuote = await fetchQuote('USDTWD=X');
+    if (fxQuote?.price) {
+        QUOTES['USDTWD=X'] = fxQuote;
+        USD_TWD = fxQuote.price;
         localStorage.setItem('usd_twd_last', USD_TWD);
     }
+
+    hasError = err > 0;
 }
 
 // ── Render Summary ────────────────────────────────────────────────────
@@ -2148,6 +2209,7 @@ function buildPayload() {
         corp_prices: corpPrices, corp_coupon_counts: corpCouponCounts,
         reserve: reserveData, loan: loanData, initial_capital: initialCapital,
         pledge_rate: pledgeRate, pledge_amount: pledgeAmount,
+        fmp_api_key: fmpApiKey,
     };
 }
 
@@ -2162,6 +2224,7 @@ function applyData(d) {
     if (d.initial_capital != null) { initialCapital = parseFloat(d.initial_capital) || 0; saveInitialCapital(); }
     if (d.pledge_rate   != null)  { pledgeRate   = parseFloat(d.pledge_rate)   || 0; savePledgeRate(); }
     if (d.pledge_amount != null)  { pledgeAmount = parseFloat(d.pledge_amount) || 0; savePledgeAmount(); }
+    if (d.fmp_api_key)            { saveFmpKey(d.fmp_api_key); }
 }
 
 function setCloudStatus(state, text) {
@@ -2230,7 +2293,14 @@ function scheduleCloudSync() {
 function showCloudModal() {
     document.getElementById('cloudTokenInput').value = cloudCfg.token || '';
     document.getElementById('cloudGistInput').value  = cloudCfg.gistId || '';
+    document.getElementById('fmpKeyInput').value     = fmpApiKey || '';
     document.getElementById('cloudModal').classList.add('open');
+}
+
+function saveFmpKeyFromModal() {
+    const key = document.getElementById('fmpKeyInput').value.trim();
+    saveFmpKey(key);
+    document.getElementById('cloudModalHint').textContent = key ? '✅ FMP API Key 已儲存！重新整理頁面後生效。' : 'FMP API Key 已清除。';
 }
 
 function closeCloudModal() {
