@@ -136,10 +136,11 @@
             margin-bottom: 10px;
         }
         /* Pie chart */
-        .pie-legend { display: grid; grid-template-columns: 10px 1fr auto 10px 1fr auto; gap: 7px 6px; align-items: center; width: 100%; }
-        .pie-legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-        .pie-legend-label { font-size: 0.85rem; white-space: nowrap; }
-        .pie-legend-amt { font-size: 0.75rem; color: var(--dim); text-align: right; white-space: nowrap; }
+        .pie-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; width: 100%; }
+        .pie-legend-item { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .pie-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+        .pie-legend-label { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .pie-legend-amt { font-size: 0.75rem; color: var(--dim); margin-left: auto; white-space: nowrap; padding-left: 4px; flex-shrink: 0; }
         /* Coupon calendar */
         .coupon-cal {
             display: grid;
@@ -2694,9 +2695,11 @@ function renderPieChart() {
         paths += `<path d="M${ix1.toFixed(1)},${iy1.toFixed(1)} L${x1.toFixed(1)},${y1.toFixed(1)} A${R},${R} 0 ${lg},1 ${x2.toFixed(1)},${y2.toFixed(1)} L${ix2.toFixed(1)},${iy2.toFixed(1)} A${ri},${ri} 0 ${lg},0 ${ix1.toFixed(1)},${iy1.toFixed(1)} Z" fill="${d.color}" opacity="0.85"/>`;
         const pct = (d.value / total * 100).toFixed(1);
         const amt = Math.round(d.value / 10000) + '萬';
-        legend += `<span class="pie-legend-dot" style="background:${d.color}"></span>
-                   <span class="pie-legend-label">${d.label}&nbsp;<strong>${pct}%</strong></span>
-                   <span class="pie-legend-amt">${amt}</span>`;
+        legend += `<div class="pie-legend-item">
+                       <span class="pie-legend-dot" style="background:${d.color}"></span>
+                       <span class="pie-legend-label">${d.label}&nbsp;<strong>${pct}%</strong></span>
+                       <span class="pie-legend-amt">${amt}</span>
+                   </div>`;
         ang = end;
     });
 
@@ -2707,7 +2710,7 @@ function renderPieChart() {
                 <text x="${cx}" y="${cy-4}" text-anchor="middle" fill="var(--dim)" font-size="8">含準備金</text>
                 <text x="${cx}" y="${cy+9}" text-anchor="middle" fill="var(--text)" font-size="10" font-weight="bold">${wan(total)}</text>
             </svg>
-            <div class="pie-legend" style="width:min(300px,100%)">${legend}</div>
+            <div class="pie-legend">${legend}</div>
         </div>`;
 }
 
@@ -2721,6 +2724,7 @@ function saveSnapshot() {
     else portfolioHistory.push({ d: today, v: val });
     portfolioHistory = portfolioHistory.slice(-365);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(portfolioHistory));
+    if (typeof scheduleCloudSync === 'function') scheduleCloudSync();
 }
 
 function renderLineChart() {
