@@ -1246,7 +1246,7 @@ function calcTotalNTD() {
 // ── Yahoo Finance fetch ───────────────────────────────────────────────
 
 async function fetchQuote(ticker) {
-    const base = `https://query%d.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`;
+    const base = `https://query%d.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}`;
     const urls = [base.replace('%d','1'), base.replace('%d','2')];
     let data = null;
 
@@ -1270,22 +1270,23 @@ async function fetchQuote(ticker) {
 
     if (!data) return null;
     try {
-        const meta  = data.chart.result[0].meta;
-        const mktState = meta.marketState ?? 'CLOSED';
+        const q = data.quoteResponse?.result?.[0];
+        if (!q) return null;
+        const mktState = q.marketState ?? 'CLOSED';
         // 盤後優先，盤前次之，否則用收盤價
-        const price = (mktState === 'POST'  && meta.postMarketPrice)  ? meta.postMarketPrice
-                    : (mktState === 'PRE'   && meta.preMarketPrice)   ? meta.preMarketPrice
-                    : meta.regularMarketPrice;
-        const prev  = meta.chartPreviousClose ?? meta.previousClose ?? meta.regularMarketPrice;
+        const price = (mktState === 'POST' && q.postMarketPrice)  ? q.postMarketPrice
+                    : (mktState === 'PRE'  && q.preMarketPrice)   ? q.preMarketPrice
+                    : q.regularMarketPrice;
+        const prev  = q.regularMarketPreviousClose ?? q.regularMarketPrice;
         const chg   = price - prev;
         return {
             price,
             prevClose   : prev,
             change      : chg,
             changePct   : prev ? chg / prev * 100 : 0,
-            currency    : meta.currency,
+            currency    : q.currency,
             marketState : mktState,
-            shortName   : meta.shortName ?? meta.longName ?? null,
+            shortName   : q.shortName ?? q.longName ?? null,
         };
     } catch(_) { return null; }
 }
@@ -2413,7 +2414,7 @@ function renderPieChart() {
 
     document.getElementById('pieChartContainer').innerHTML = `
         <div style="display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap;width:100%;height:100%">
-            <svg width="240" height="240" viewBox="0 0 160 160" style="flex-shrink:0">
+            <svg viewBox="0 0 160 160" style="flex-shrink:0;width:min(240px,calc(100vw - 80px));height:auto">
                 ${paths}
                 <text x="${cx}" y="${cy-5}" text-anchor="middle" fill="var(--dim)" font-size="8">含準備金</text>
                 <text x="${cx}" y="${cy+7}" text-anchor="middle" fill="var(--text)" font-size="9" font-weight="bold">${wan(total)}</text>
@@ -2441,7 +2442,7 @@ function renderLineChart() {
         el.innerHTML = '<div style="color:var(--dim);font-size:0.78rem;text-align:center;padding:36px 0">資料不足，每日載入後自動累積走勢…</div>';
         return;
     }
-    const W = 340, H = 120, PX = 28, PY = 14;
+    const W = 340, H = 120, PX = 28, PY = 26;
     const vals = h.map(s => s.v);
     const minV = Math.min(...vals), maxV = Math.max(...vals);
     const range = maxV - minV || 1;
@@ -2459,10 +2460,10 @@ function renderLineChart() {
         <polygon points="${area}" fill="url(#lg)"/>
         <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>
         <circle cx="${toX(h.length-1).toFixed(1)}" cy="${toY(last.v).toFixed(1)}" r="3" fill="${color}"/>
-        <text x="${PX}" y="${H-2}" fill="var(--dim)" font-size="7">${h[0].d}</text>
-        <text x="${W-PX}" y="${H-2}" fill="var(--dim)" font-size="7" text-anchor="end">${last.d}</text>
-        <text x="${W-PX}" y="${Math.max(PY+10, toY(last.v)-20)}" fill="${color}" font-size="8" text-anchor="end">${wan(last.v)}</text>
-        <text x="${PX}" y="${Math.max(8, toY(maxV)-12)}" fill="var(--dim)" font-size="7">${wan(maxV)}</text>
+        <text x="${PX}" y="${H-14}" fill="var(--dim)" font-size="7.5">${wan(h[0].v)}</text>
+        <text x="${PX}" y="${H-5}" fill="var(--dim)" font-size="7">${h[0].d}</text>
+        <text x="${W-PX}" y="${H-14}" fill="${color}" font-size="7.5" text-anchor="end">${wan(last.v)}</text>
+        <text x="${W-PX}" y="${H-5}" fill="var(--dim)" font-size="7" text-anchor="end">${last.d}</text>
     </svg>`;
 }
 
