@@ -585,10 +585,10 @@
         <input class="modal-input" id="cloudTokenInput" type="password" placeholder="ghp_xxxxxxxxxxxx">
         <div class="modal-label">Gist ID <span style="color:var(--dim);font-size:0.65rem">（第一次留空，系統自動建立）</span></div>
         <input class="modal-input" id="cloudGistInput" placeholder="自動填入後請記下此 ID">
-        <div class="modal-label" style="margin-top:14px">FMP API Key <span style="color:var(--dim);font-size:0.65rem">（美股 / 匯率報價，<a href="https://financialmodelingprep.com" target="_blank" style="color:var(--accent)">financialmodelingprep.com</a> 免費申請）</span></div>
+        <div class="modal-label" style="margin-top:14px">Twelve Data API Key <span style="color:var(--dim);font-size:0.65rem">（美股 / 匯率報價，<a href="https://twelvedata.com" target="_blank" style="color:var(--accent)">twelvedata.com</a> 免費申請）</span></div>
         <div style="display:flex;gap:6px;align-items:center">
-            <input class="modal-input" id="fmpKeyInput" type="password" placeholder="貼入 API Key" style="flex:1;margin-bottom:0">
-            <button class="btn" onclick="saveFmpKeyFromModal()" style="white-space:nowrap;padding:6px 12px">儲存</button>
+            <input class="modal-input" id="twelveKeyInput" type="password" placeholder="貼入 API Key" style="flex:1;margin-bottom:0">
+            <button class="btn" onclick="saveTwelveKeyFromModal()" style="white-space:nowrap;padding:6px 12px">儲存</button>
         </div>
         <div class="modal-actions" style="margin-top:14px">
             <button class="btn" onclick="connectCloud()" style="background:var(--accent);color:#000;border-color:var(--accent)">連線 / 儲存</button>
@@ -929,11 +929,11 @@ let hasError = false;
 let fetchAttempted = false;  // 至少嘗試過一次抓取
 let prevPrices = {};         // 上次抓取的價格，用於閃爍動畫
 
-// FMP API Key（Financial Modeling Prep，美股報價用）
-const FMP_KEY_STORAGE = 'fmp_api_key';
-let fmpApiKey = '';
-try { fmpApiKey = localStorage.getItem(FMP_KEY_STORAGE) || ''; } catch(_) {}
-function saveFmpKey(key) { fmpApiKey = key; localStorage.setItem(FMP_KEY_STORAGE, key); }
+// Twelve Data API Key（美股 / 匯率報價用）
+const TWELVE_KEY_STORAGE = 'twelve_api_key';
+let twelveApiKey = '';
+try { twelveApiKey = localStorage.getItem(TWELVE_KEY_STORAGE) || ''; } catch(_) {}
+function saveTwelveKey(key) { twelveApiKey = key; localStorage.setItem(TWELVE_KEY_STORAGE, key); }
 
 // 質押年利率 & 質押金額（手動輸入，存 localStorage）
 const PLEDGE_RATE_KEY   = 'pledge_rate_v1';
@@ -1302,43 +1302,42 @@ async function fetchQuote(ticker) {
     } catch(_) { return null; }
 }
 
-// ── Financial Modeling Prep fetch ─────────────────────────────────────
+// ── Twelve Data fetch ──────────────────────────────────────────────────
 
-async function fetchFmpQuote(ticker) {
-    if (!fmpApiKey) return null;
+async function fetchTwelveQuote(ticker) {
+    if (!twelveApiKey) return null;
     try {
-        const url = `https://financialmodelingprep.com/api/v3/quote/${encodeURIComponent(ticker)}?apikey=${fmpApiKey}`;
+        const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(ticker)}&apikey=${twelveApiKey}`;
         const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
         if (!r.ok) return null;
-        const data = await r.json();
-        const q = Array.isArray(data) ? data[0] : null;
-        if (!q || !q.price) return null;
-        const prev = q.previousClose ?? q.price;
-        const chg  = q.change ?? (q.price - prev);
+        const q = await r.json();
+        if (q.status === 'error' || !q.close) return null;
+        const price = parseFloat(q.close);
+        const prev  = parseFloat(q.previous_close) || price;
+        const chg   = parseFloat(q.change) || (price - prev);
         return {
-            price     : q.price,
-            prevClose : prev,
-            change    : chg,
-            changePct : q.changesPercentage ?? (prev ? chg / prev * 100 : 0),
-            currency  : q.currency || 'USD',
-            marketState: 'REGULAR',
-            shortName : q.name ?? null,
+            price,
+            prevClose  : prev,
+            change     : chg,
+            changePct  : parseFloat(q.percent_change) || (prev ? chg / prev * 100 : 0),
+            currency   : q.currency || 'USD',
+            marketState: q.is_market_open ? 'REGULAR' : 'CLOSED',
+            shortName  : q.name ?? null,
         };
     } catch(_) { return null; }
 }
 
-async function fetchFmpForex() {
-    if (!fmpApiKey) return null;
+async function fetchTwelveForex() {
+    if (!twelveApiKey) return null;
     try {
-        const url = `https://financialmodelingprep.com/api/v3/fx/USDTWD?apikey=${fmpApiKey}`;
+        const url = `https://api.twelvedata.com/quote?symbol=USD/TWD&apikey=${twelveApiKey}`;
         const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
         if (!r.ok) return null;
-        const data = await r.json();
-        const q = Array.isArray(data) ? data[0] : null;
-        if (!q) return null;
-        const price = parseFloat(q.ask) || parseFloat(q.bid) || null;
+        const q = await r.json();
+        if (q.status === 'error' || !q.close) return null;
+        const price = parseFloat(q.close);
         if (!price) return null;
-        return { price, prevClose: price, change: q.changes ?? 0, changePct: 0, currency: 'TWD', marketState: 'REGULAR', shortName: 'USD/TWD' };
+        return { price, prevClose: price, change: parseFloat(q.change) || 0, changePct: parseFloat(q.percent_change) || 0, currency: 'TWD', marketState: 'REGULAR', shortName: 'USD/TWD' };
     } catch(_) { return null; }
 }
 
@@ -1354,16 +1353,16 @@ async function fetchAllQuotes() {
         else err++;
     });
 
-    // 美股 → FMP（有 key）或 Yahoo（無 key）
-    const usFetcher = fmpApiKey ? (t => fetchFmpQuote(t)) : (t => fetchQuote(t));
+    // 美股 → Twelve Data（有 key）或 Yahoo（無 key）
+    const usFetcher = twelveApiKey ? (t => fetchTwelveQuote(t)) : (t => fetchQuote(t));
     const usResults = await Promise.allSettled(usTickers.map(usFetcher));
     usResults.forEach((r, i) => {
         if (r.status === 'fulfilled' && r.value) QUOTES[usTickers[i]] = r.value;
         else err++;
     });
 
-    // USD/TWD → FMP forex 優先，失敗再用 Yahoo
-    let fxQuote = fmpApiKey ? await fetchFmpForex() : null;
+    // USD/TWD → Twelve Data 優先，失敗再用 Yahoo
+    let fxQuote = twelveApiKey ? await fetchTwelveForex() : null;
     if (!fxQuote) fxQuote = await fetchQuote('USDTWD=X');
     if (fxQuote?.price) {
         QUOTES['USDTWD=X'] = fxQuote;
@@ -2209,7 +2208,7 @@ function buildPayload() {
         corp_prices: corpPrices, corp_coupon_counts: corpCouponCounts,
         reserve: reserveData, loan: loanData, initial_capital: initialCapital,
         pledge_rate: pledgeRate, pledge_amount: pledgeAmount,
-        fmp_api_key: fmpApiKey,
+        twelve_api_key: twelveApiKey,
     };
 }
 
@@ -2224,7 +2223,7 @@ function applyData(d) {
     if (d.initial_capital != null) { initialCapital = parseFloat(d.initial_capital) || 0; saveInitialCapital(); }
     if (d.pledge_rate   != null)  { pledgeRate   = parseFloat(d.pledge_rate)   || 0; savePledgeRate(); }
     if (d.pledge_amount != null)  { pledgeAmount = parseFloat(d.pledge_amount) || 0; savePledgeAmount(); }
-    if (d.fmp_api_key)            { saveFmpKey(d.fmp_api_key); }
+    if (d.twelve_api_key)         { saveTwelveKey(d.twelve_api_key); }
 }
 
 function setCloudStatus(state, text) {
@@ -2293,14 +2292,14 @@ function scheduleCloudSync() {
 function showCloudModal() {
     document.getElementById('cloudTokenInput').value = cloudCfg.token || '';
     document.getElementById('cloudGistInput').value  = cloudCfg.gistId || '';
-    document.getElementById('fmpKeyInput').value     = fmpApiKey || '';
+    document.getElementById('twelveKeyInput').value  = twelveApiKey || '';
     document.getElementById('cloudModal').classList.add('open');
 }
 
-function saveFmpKeyFromModal() {
-    const key = document.getElementById('fmpKeyInput').value.trim();
-    saveFmpKey(key);
-    document.getElementById('cloudModalHint').textContent = key ? '✅ FMP API Key 已儲存！重新整理頁面後生效。' : 'FMP API Key 已清除。';
+function saveTwelveKeyFromModal() {
+    const key = document.getElementById('twelveKeyInput').value.trim();
+    saveTwelveKey(key);
+    document.getElementById('cloudModalHint').textContent = key ? '✅ Twelve Data API Key 已儲存！' : 'Twelve Data API Key 已清除。';
 }
 
 function closeCloudModal() {
