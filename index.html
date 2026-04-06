@@ -1427,7 +1427,7 @@ function renderSummary() {
                 ${overallPct === null ? '—' : fmt(overallPct, 2) + '%'}
             </div>
             <div class="card-sub" style="margin-top:6px">
-                ${overallGain !== null ? '損益 ' + fmt(overallGain, 0, '$') + ' NTD<br>' : ''}
+                ${overallGain !== null ? '損益 ' + fmt(overallGain, 0) + ' NTD<br>' : ''}
                 原始資金：<span class="initcap-amount" id="initcap-val"
                     onclick="startEditInitCap()"
                     title="點擊設定原始投入資金">
@@ -1440,25 +1440,11 @@ function renderSummary() {
     const loanCard = `
         <div class="card card-loan">
             <div class="card-label">借款 <small style="font-size:0.6rem;color:var(--dim);text-transform:none">（點數字編輯）</small></div>
-            <div class="loan-row">
+            <div style="display:grid;grid-template-columns:3em 1fr;gap:2px 6px;margin-top:6px;font-size:0.63rem;line-height:1.9">
                 <span class="loan-row-label">NTD</span>
-                <div class="loan-val-wrap">
-                    <span class="loan-amount" id="loan-val-NTD"
-                          onclick="startEditLoan('NTD')"
-                          title="點擊編輯借款台幣金額">
-                        ${loanData.NTD ? wan(loanData.NTD) : '0'}
-                    </span>
-                </div>
-            </div>
-            <div class="loan-row">
+                <span class="loan-amount" id="loan-val-NTD" onclick="startEditLoan('NTD')" title="點擊編輯借款台幣金額">${loanData.NTD ? wan(loanData.NTD) : '0'}</span>
                 <span class="loan-row-label">USD</span>
-                <div class="loan-val-wrap">
-                    <span class="loan-amount" id="loan-val-USD"
-                          onclick="startEditLoan('USD')"
-                          title="點擊編輯借款美金金額">
-                        ${loanData.USD ? '$' + loanData.USD.toLocaleString() : '$0'}
-                    </span>
-                </div>
+                <span class="loan-amount" id="loan-val-USD" onclick="startEditLoan('USD')" title="點擊編輯借款美金金額">${loanData.USD ? '$' + loanData.USD.toLocaleString() : '$0'}</span>
             </div>
             <div class="loan-edit-hint">
                 合計 ≈ ${wan(loanNTD)} NTD ｜ 淨資產 ${wan(netAsset)}
@@ -1506,15 +1492,14 @@ function renderSummary() {
         <div class="card">
             <div class="card-label">今日損益 (NTD)</div>
             <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
-                <div class="card-val ${dlC}" id="sv-daily">${fmt(dailyNTD, 0, '$')}</div>
+                <div class="card-val ${dlC}" id="sv-daily">${fmt(dailyNTD, 0)}</div>
                 <span class="${dlC}" style="font-size:0.78rem;font-weight:600">${fmt(dailyPct, 2)}%</span>
             </div>
-            <div class="card-sub" style="margin-top:6px;font-size:0.63rem;line-height:1.8">
-                台股 <span class="${cc(twDaily)}">${fmt(twDaily, 0, '$')}</span> ｜
-                美股 <span class="${cc(usDaily)}">${fmt(usDaily, 0, '$')}</span><br>
-                公司債 <span class="${hasFx ? cc(bondDaily) : 'neu'}">${hasFx ? fmt(bondDaily, 0, '$') : '—'}</span> ｜
-                準備金 <span class="${hasFx ? cc(reserveUsdDaily) : 'neu'}">${hasFx ? fmt(reserveUsdDaily, 0, '$') : '—'}</span>
-                ${hasFx ? '' : '<span style="opacity:.55">（匯率待更新）</span>'}
+            <div class="card-sub" style="margin-top:6px;font-size:0.63rem;line-height:1.9;display:grid;grid-template-columns:3em 1fr;gap:0 4px">
+                <span>台股</span><span class="${cc(twDaily)}">${fmt(twDaily, 0)}</span>
+                <span>美股</span><span class="${cc(usDaily)}">${fmt(usDaily, 0)}</span>
+                <span>公司債</span><span class="${hasFx ? cc(bondDaily) : 'neu'}">${hasFx ? fmt(bondDaily, 0) : '—'}</span>
+                <span>準備金</span><span class="${hasFx ? cc(reserveUsdDaily) : 'neu'}">${hasFx ? fmt(reserveUsdDaily, 0) : '—'}</span>
             </div>
         </div>`;
 
@@ -1522,9 +1507,9 @@ function renderSummary() {
     const prev = prevSummaryVals;
     document.getElementById('summaryCards').innerHTML =
         sc('含準備金總資產',      wan(grandTotal),         '準備金 ' + wan(reserveNTD), '', 'sv-grand') +
-        sc('投資總市值 (NTD)',    wan(totalNTD),           fmtP(totalNTD) + ' NTD', '', 'sv-total') +
+        sc('投資總市值 (NTD)',    wan(totalNTD),           fmtP(totalNTD, 0) + ' NTD', '', 'sv-total') +
         returnCard +
-        sc('未實現損益 (NTD)',    fmt(unrealized, 0, '$'), fmt(unrPct, 2) + '%', cc(unrealized), 'sv-unr') +
+        sc('未實現損益 (NTD)',    fmt(unrealized, 0),      fmt(unrPct, 2) + '%', cc(unrealized), 'sv-unr') +
         dailyCard +
         reserveCard + loanCard + rateCard;
 
