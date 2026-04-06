@@ -2408,7 +2408,7 @@ function renderPieChart() {
     });
 
     document.getElementById('pieChartContainer').innerHTML = `
-        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap;width:100%;height:100%">
             <svg width="160" height="160" viewBox="0 0 160 160" style="flex-shrink:0">
                 ${paths}
                 <text x="${cx}" y="${cy-5}" text-anchor="middle" fill="var(--dim)" font-size="8">含準備金</text>
@@ -2457,8 +2457,8 @@ function renderLineChart() {
         <circle cx="${toX(h.length-1).toFixed(1)}" cy="${toY(last.v).toFixed(1)}" r="3" fill="${color}"/>
         <text x="${PX}" y="${H-2}" fill="var(--dim)" font-size="8">${h[0].d}</text>
         <text x="${W-PX}" y="${H-2}" fill="var(--dim)" font-size="8" text-anchor="end">${last.d}</text>
-        <text x="${W-PX}" y="${Math.max(PY+10, toY(last.v)-4)}" fill="${color}" font-size="9" text-anchor="end">${wan(last.v)}</text>
-        <text x="${PX}" y="${toY(maxV)+10}" fill="var(--dim)" font-size="8">${wan(maxV)}</text>
+        <text x="${W-PX}" y="${Math.max(PY+10, toY(last.v)-12)}" fill="${color}" font-size="9" text-anchor="end">${wan(last.v)}</text>
+        <text x="${PX}" y="${Math.max(9, toY(maxV)-4)}" fill="var(--dim)" font-size="8">${wan(maxV)}</text>
     </svg>`;
 }
 
