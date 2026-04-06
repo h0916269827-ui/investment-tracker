@@ -1198,11 +1198,13 @@ function hmColor(pct) {
 
 // ── Fee & Tax ─────────────────────────────────────────────────────────
 
-const TW_SELL_COEF = 0.996672; // 賣出係數（已含稅金與手續費）
+const TW_SELL_COEF      = 0.996672; // 個人戶賣出係數
+const TW_SELL_COEF_CORP = 0.996601; // 公司戶賣出係數
 
 function twAfterTaxPnL(h, price) {
     const shares = h.lots * 1000;
-    return price * shares * TW_SELL_COEF - h.cost * shares;
+    const coef   = h.account === 'corp' ? TW_SELL_COEF_CORP : TW_SELL_COEF;
+    return price * shares * coef - h.cost * shares;
 }
 
 // ── Corp bond helpers ─────────────────────────────────────────────────
@@ -1620,8 +1622,13 @@ function buildTwRow(h, idx, totalNTD) {
                 <span onclick="editTwName(${idx})" title="點擊修改名稱" style="cursor:pointer;border-bottom:1px dashed transparent" onmouseover="this.style.borderColor='var(--dim)'" onmouseout="this.style.borderColor='transparent'">${h.name}</span>
                 ${marketBadge(q?.marketState)}
             </div>
-            <div class="tbl-sub">
+            <div class="tbl-sub" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                 <span onclick="editTwTicker(${idx})" title="點擊修改代號" style="cursor:pointer;border-bottom:1px dashed transparent" onmouseover="this.style.borderColor='var(--dim)'" onmouseout="this.style.borderColor='transparent'">${h.ticker}</span>
+                <span onclick="saveTwAccount(${idx},'${h.account === 'corp' ? 'personal' : 'corp'}')"
+                      style="cursor:pointer;font-size:0.58rem;padding:1px 5px;border-radius:3px;border:1px solid;${h.account === 'corp' ? 'border-color:var(--accent);color:var(--accent)' : 'border-color:var(--dim);color:var(--dim)'}"
+                      title="點擊切換個人/公司戶">
+                    ${h.account === 'corp' ? '公司' : '個人'}
+                </span>
             </div>
         </td>
         <td>
@@ -1692,6 +1699,15 @@ function saveTwField(idx, field, raw) {
     document.getElementById(`tw-row-${idx}`).outerHTML = newRow;
     renderSummary();
     renderHeatmap();
+}
+
+function saveTwAccount(idx, val) {
+    TW_DATA[idx].account = val;
+    saveTwData();
+    const totalNTD = calcTotalNTD();
+    const newRow = buildTwRow(TW_DATA[idx], idx, totalNTD);
+    document.getElementById(`tw-row-${idx}`).outerHTML = newRow;
+    renderSummary();
 }
 
 // 點擊名稱/代號 inline 編輯
