@@ -502,6 +502,13 @@
         }
         th.th-op { width: 32px; }
         td.td-op { text-align: center; }
+        th.th-drag { width: 18px; padding: 0 !important; }
+        td.td-drag { width: 18px; padding: 0 3px; text-align: center; vertical-align: middle; }
+        .drag-handle { cursor: grab; color: var(--dim); font-size: 0.85rem; user-select: none; display: inline-block; opacity: 0.5; }
+        .drag-handle:hover { opacity: 1; }
+        .drag-handle:active { cursor: grabbing; }
+        tr.drag-over td { background: rgba(88,166,255,0.08); outline: 1px dashed var(--accent); }
+        tr.dragging { opacity: 0.35; }
 
         /* ── Coupon badge ── */
         .coupon-tag {
@@ -722,6 +729,7 @@
         <table>
             <thead>
                 <tr>
+                    <th class="th-drag"></th>
                     <th>名稱 / 代號</th>
                     <th>張數</th>
                     <th>均成本/股</th>
@@ -736,7 +744,7 @@
                 </tr>
             </thead>
             <tbody id="twBody">
-                <tr><td colspan="11" style="text-align:center;padding:24px;color:var(--dim)"><span class="shimmer"></span></td></tr>
+                <tr><td colspan="12" style="text-align:center;padding:24px;color:var(--dim)"><span class="shimmer"></span></td></tr>
             </tbody>
         </table>
     </div>
@@ -755,6 +763,7 @@
         <table>
             <thead>
                 <tr>
+                    <th class="th-drag"></th>
                     <th>名稱 / 代號</th>
                     <th>股數</th>
                     <th>均成本 USD</th>
@@ -769,7 +778,7 @@
                 </tr>
             </thead>
             <tbody id="usBody">
-                <tr><td colspan="11" style="text-align:center;padding:24px;color:var(--dim)"><span class="shimmer"></span></td></tr>
+                <tr><td colspan="12" style="text-align:center;padding:24px;color:var(--dim)"><span class="shimmer"></span></td></tr>
             </tbody>
         </table>
     </div>
@@ -1603,6 +1612,52 @@ function renderHeatmap() {
     document.getElementById('heatmap').innerHTML = rowHTML(rows[0], h0) + rowHTML(rows[1], h1);
 }
 
+// ── Drag-and-drop row reorder ─────────────────────────────────────────
+
+let _dragSrc = null;
+
+function _initDrag(tbodyId, arr, saveFn, renderFn) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    tbody.addEventListener('dragstart', e => {
+        const handle = e.target.closest('.drag-handle');
+        const row    = e.target.closest('tr[draggable]');
+        if (!handle || !row) { e.preventDefault(); return; }
+        _dragSrc = { el: row, id: tbodyId };
+        e.dataTransfer.effectAllowed = 'move';
+        setTimeout(() => row.classList.add('dragging'), 0);
+    });
+    tbody.addEventListener('dragover', e => {
+        e.preventDefault();
+        const row = e.target.closest('tr[draggable]');
+        tbody.querySelectorAll('tr.drag-over').forEach(r => r.classList.remove('drag-over'));
+        if (row && _dragSrc && row !== _dragSrc.el && _dragSrc.id === tbodyId)
+            row.classList.add('drag-over');
+    });
+    tbody.addEventListener('dragleave', e => {
+        if (!tbody.contains(e.relatedTarget))
+            tbody.querySelectorAll('tr.drag-over').forEach(r => r.classList.remove('drag-over'));
+    });
+    tbody.addEventListener('drop', e => {
+        e.preventDefault();
+        if (!_dragSrc || _dragSrc.id !== tbodyId) return;
+        const row = e.target.closest('tr[draggable]');
+        if (!row || row === _dragSrc.el) return;
+        const from = parseInt(_dragSrc.el.dataset.idx);
+        const to   = parseInt(row.dataset.idx);
+        if (isNaN(from) || isNaN(to)) return;
+        const item = arr.splice(from, 1)[0];
+        arr.splice(to, 0, item);
+        saveFn();
+        renderFn();
+    });
+    tbody.addEventListener('dragend', () => {
+        tbody.querySelectorAll('tr[draggable]').forEach(r =>
+            r.classList.remove('dragging', 'drag-over'));
+        _dragSrc = null;
+    });
+}
+
 // ── Render TW Table ───────────────────────────────────────────────────
 
 function buildTwRow(h, idx, totalNTD) {
@@ -1616,7 +1671,8 @@ function buildTwRow(h, idx, totalNTD) {
     const wt     = totalNTD > 0 ? val / totalNTD * 100 : 0;
     const pnlPct = cost > 0 ? afterT / cost * 100 : 0;
     const exclCls = h.excluded ? ' excl-row' : '';
-    return `<tr id="tw-row-${idx}"${exclCls ? ` class="${exclCls.trim()}"` : ''}>
+    return `<tr id="tw-row-${idx}" draggable="true" data-idx="${idx}"${exclCls ? ` class="${exclCls.trim()}"` : ''}>
+        <td class="td-drag"><span class="drag-handle">⠿</span></td>
         <td>
             <div class="tbl-name">
                 <span onclick="editTwName(${idx})" title="點擊修改名稱" style="cursor:pointer;border-bottom:1px dashed transparent" onmouseover="this.style.borderColor='var(--dim)'" onmouseout="this.style.borderColor='transparent'">${h.name}</span>
@@ -1676,7 +1732,7 @@ function renderTwTable() {
     }, 0);
     const totPnlPct  = totCost > 0 ? totAfterT / totCost * 100 : 0;
     rows += `<tr class="tbl-total">
-        <td colspan="5">合計</td>
+        <td colspan="6">合計</td>
         <td class="${cc(totDaily)}">${fmt(totDaily, 0)}</td>
         <td>${wan(totVal)}</td>
         <td class="${cc(totAfterT)}">${fmt(totAfterT, 0)}</td>
@@ -1877,7 +1933,8 @@ function buildUsRow(h, idx, totalNTD) {
     const wt     = totalNTD > 0 ? val * USD_TWD / totalNTD * 100 : 0;
     const pnlPct = h.cost > 0 ? (price - h.cost) / h.cost * 100 : 0;
     const exclClsUs = h.excluded ? 'excl-row' : '';
-    return `<tr id="us-row-${idx}"${exclClsUs ? ` class="${exclClsUs}"` : ''}>
+    return `<tr id="us-row-${idx}" draggable="true" data-idx="${idx}"${exclClsUs ? ` class="${exclClsUs}"` : ''}>
+        <td class="td-drag"><span class="drag-handle">⠿</span></td>
         <td>
             <div class="tbl-name">
                 <span onclick="editUsName(${idx})" title="點擊修改名稱" style="cursor:pointer;border-bottom:1px dashed transparent" onmouseover="this.style.borderColor='var(--dim)'" onmouseout="this.style.borderColor='transparent'">${h.name}</span>
@@ -1928,7 +1985,7 @@ function renderUsTable() {
 
     const totPnlPct = totCostUSD > 0 ? totUnrUSD / totCostUSD * 100 : 0;
     rows += `<tr class="tbl-total">
-        <td colspan="5">合計</td>
+        <td colspan="6">合計</td>
         <td class="${cc(totDayUSD)}">${fmt(totDayUSD, 2, '$')}<div class="tbl-sub">${fmt(totDayUSD * USD_TWD, 0, '$')} NTD</div></td>
         <td class="${cc(totUnrUSD)}">${fmt(totUnrUSD, 2, '$')}<div class="tbl-sub">${fmt(totUnrUSD * USD_TWD, 0, '$')} NTD</div></td>
         <td>${wan(totValUSD * USD_TWD)}</td>
@@ -2789,6 +2846,9 @@ async function onPinInput(val) {
 }
 
 async function initApp() {
+    // 拖曳排序初始化（只需一次，事件委派在 tbody 上，innerHTML 更新後仍有效）
+    _initDrag('twBody', TW_DATA, saveTwData, () => { renderTwTable(); renderSummary(); renderHeatmap(); });
+    _initDrag('usBody', US_DATA, saveUsData, () => { renderUsTable(); renderSummary(); renderHeatmap(); });
     // 15 秒自動刷新
     setInterval(() => doRefresh(false), 120 * 1000);
     // 頁面從背景回到前景時立即重整（修正時間戳落後問題）
