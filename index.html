@@ -2717,7 +2717,7 @@ function renderLineChart() {
         return;
     }
     const h   = full.slice(-5);  // 最近 5 天
-    const W = 340, H = 130, PX = 30, PY = 22, BOT = 26;
+    const W = 340, H = 135, PX = 30, PY = 18, BOT = 30;
     const chartH = H - PY - BOT;   // 可用繪圖高度
     const vals = h.map(s => s.v);
     const minV = Math.min(...vals), maxV = Math.max(...vals);
@@ -2735,13 +2735,11 @@ function renderLineChart() {
         const isFirst = i === 0, isLast = i === h.length - 1;
         const anchor  = isFirst ? 'start' : isLast ? 'end' : 'middle';
         const valCol  = isLast ? color : 'var(--dim)';
-        // 節點圓點
+        // 節點圓點（不顯示標籤，避免與線條重疊）
         dots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${isLast ? 3.5 : 2.5}" fill="${valCol}"/>`;
-        // 數值標籤（節點上方；若太靠近頂部則改下方）
-        const lblY = y - 6 < PY + 8 ? y + 12 : y - 6;
-        dots += `<text x="${x.toFixed(1)}" y="${lblY.toFixed(1)}" fill="${valCol}" font-size="${isLast ? 7.5 : 6.5}" text-anchor="${anchor}" font-weight="${isLast ? 600 : 400}">${wan(s.v)}</text>`;
-        // 日期標籤（底部，只顯示 MM-DD）
+        // 底部：數值在上，日期在下
         const dateStr = s.d.length >= 10 ? s.d.slice(5) : s.d;
+        labels += `<text x="${x.toFixed(1)}" y="${H - 16}" fill="${valCol}" font-size="${isLast ? 7.5 : 6}" text-anchor="${anchor}" font-weight="${isLast ? 600 : 400}">${wan(s.v)}</text>`;
         labels += `<text x="${x.toFixed(1)}" y="${H - 5}" fill="var(--dim)" font-size="6.5" text-anchor="${anchor}">${dateStr}</text>`;
     });
 
