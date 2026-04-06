@@ -933,7 +933,7 @@ let prevPrices = {};         // 上次抓取的價格，用於閃爍動畫
 const TWELVE_KEY_STORAGE = 'twelve_api_key';
 let twelveApiKey = '';
 try { twelveApiKey = localStorage.getItem(TWELVE_KEY_STORAGE) || ''; } catch(_) {}
-function saveTwelveKey(key) { twelveApiKey = key; localStorage.setItem(TWELVE_KEY_STORAGE, key); }
+function saveTwelveKey(key) { twelveApiKey = key; localStorage.setItem(TWELVE_KEY_STORAGE, key); if (typeof scheduleCloudSync === 'function') scheduleCloudSync(); }
 
 // 質押年利率 & 質押金額（手動輸入，存 localStorage）
 const PLEDGE_RATE_KEY   = 'pledge_rate_v1';
