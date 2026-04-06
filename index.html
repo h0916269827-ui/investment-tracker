@@ -817,7 +817,7 @@
 
 <!-- ─── Footer ─── -->
 <div style="text-align:center;color:var(--dim);font-size:0.68rem;padding:12px 0 4px">
-    每 5 分鐘自動更新 · 台股/美股報價: Yahoo Finance · 企業債手動輸入 · 僅供個人參考
+    每 15 秒自動更新 · 台股報價: Yahoo Finance · 美股報價: Twelve Data · 企業債手動輸入 · 僅供個人參考
 </div>
 
 <script>
@@ -1184,15 +1184,16 @@ function marketBadge(state) {
 // ── Heatmap color scale ───────────────────────────────────────────────
 
 function hmColor(pct) {
-    if (pct >=  6) return ['#003d1a', '#00e676'];
-    if (pct >=  4) return ['#1b5e20', '#4caf50'];
-    if (pct >=  2) return ['#2e7d32', '#81c784'];
-    if (pct >=  0.5) return ['#388e3c', '#a5d6a7'];
+    // 台股慣例：漲紅跌綠
+    if (pct >=  6) return ['#3d0000', '#ff5252'];
+    if (pct >=  4) return ['#7f1d1d', '#ef9a9a'];
+    if (pct >=  2) return ['#991b1b', '#f87171'];
+    if (pct >=  0.5) return ['#b91c1c', '#fc8181'];
     if (pct > -0.5) return ['#263238', '#90a4ae'];
-    if (pct > -2) return ['#7f1d1d', '#ef9a9a'];
-    if (pct > -4) return ['#991b1b', '#f87171'];
-    if (pct > -6) return ['#b91c1c', '#fc8181'];
-    return ['#7f0000', '#ff5252'];
+    if (pct > -2) return ['#388e3c', '#a5d6a7'];
+    if (pct > -4) return ['#2e7d32', '#81c784'];
+    if (pct > -6) return ['#1b5e20', '#4caf50'];
+    return ['#003d1a', '#00e676'];
 }
 
 // ── Fee & Tax ─────────────────────────────────────────────────────────
