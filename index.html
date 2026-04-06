@@ -665,14 +665,6 @@
     </div>
 </div>
 
-<!-- ─── Notices ─── -->
-<div class="notice notice-warn" id="apiNotice">
-    ⚠ 部分報價無法取得（市場休市或 API 限制），顯示最後快取資料。
-</div>
-<div class="notice notice-info" id="corpBondNotice">
-    📌 企業債券（JPM / STANLN / UBS）為 OTC 場外交易，請手動輸入目前價格（以 par 的 % 表示，例如 99.50）。
-</div>
-
 <!-- ─── Summary Cards ─── -->
 <div class="cards" id="summaryCards">
     <div class="card"><div class="card-label">總市值</div><div class="card-val"><span class="shimmer"></span></div></div>
@@ -813,6 +805,14 @@
             <tbody id="corpBondBody"></tbody>
         </table>
     </div>
+</div>
+
+<!-- ─── Notices ─── -->
+<div class="notice notice-info" id="corpBondNotice">
+    📌 企業債券（JPM / STANLN / UBS）為 OTC 場外交易，請手動輸入目前價格（以 par 的 % 表示，例如 99.50）。
+</div>
+<div class="notice notice-warn" id="apiNotice">
+    ⚠ 部分報價無法取得（市場休市或 API 限制），顯示最後快取資料。
 </div>
 
 <!-- ─── Footer ─── -->
@@ -1663,9 +1663,9 @@ function renderTwTable() {
     const totPnlPct  = totCost > 0 ? totAfterT / totCost * 100 : 0;
     rows += `<tr class="tbl-total">
         <td colspan="5">合計</td>
-        <td class="${cc(totDaily)}">${fmt(totDaily, 0, '$')}</td>
+        <td class="${cc(totDaily)}">${fmt(totDaily, 0)}</td>
         <td>${wan(totVal)}</td>
-        <td class="${cc(totAfterT)}">${fmt(totAfterT, 0, '$')}</td>
+        <td class="${cc(totAfterT)}">${fmt(totAfterT, 0)}</td>
         <td>${(totalNTD > 0 ? totVal / totalNTD * 100 : 0).toFixed(1)}%</td>
         <td class="${cc(totPnlPct)}" style="font-weight:700">${fmt(totPnlPct, 2)}%</td>
         <td></td>
@@ -1874,7 +1874,7 @@ function buildUsRow(h, idx, totalNTD) {
                    onchange="saveUsField(${idx},'cost',this.value)"
                    title="每股均成本（USD）">
         </td>
-        <td>${q ? `$${fmtP(q.price)}<div class="tbl-sub">≈ ${wan(q.price * USD_TWD)}</div>` : (fetchAttempted ? '<span class="neu">—</span>' : '<span class="shimmer"></span>')}</td>
+        <td>${q ? `$${fmtP(q.price)}<div class="tbl-sub">≈ ${wan(q.price * USD_TWD)} NTD</div>` : (fetchAttempted ? '<span class="neu">—</span>' : '<span class="shimmer"></span>')}</td>
         <td class="${cc(q?.changePct)}">${q ? fmt(q.changePct, 2) + '%' : '—'}</td>
         <td class="${cc(daily)}">${q ? `${fmt(daily, 2, '$')}<div class="tbl-sub">${fmt(daily * USD_TWD, 0, '$')} NTD</div>` : '—'}</td>
         <td class="${cc(unreal)}">${fmt(unreal, 2, '$')}<div class="tbl-sub">${fmt(unreal * USD_TWD, 0, '$')} NTD</div></td>
@@ -2619,16 +2619,16 @@ function renderPledgeAnalysis() {
             </div>
             <div class="pledge-stat">
                 <div class="pledge-stat-label">月債息收入</div>
-                <div class="pledge-stat-val pos">≈ ${wan(monthlyIncomeNTD)} NTD</div>
+                <div class="pledge-stat-val pos">≈ ${wan(monthlyIncomeNTD)}</div>
             </div>
             <div class="pledge-stat">
                 <div class="pledge-stat-label">月質押利息</div>
-                <div class="pledge-stat-val neg">≈ ${wan(monthlyCostNTD)} NTD</div>
+                <div class="pledge-stat-val neg">≈ ${wan(monthlyCostNTD)}</div>
             </div>
             <div class="pledge-stat" style="border-left:2px solid var(--border);padding-left:14px">
                 <div class="pledge-stat-label">月淨收益</div>
                 <div class="pledge-stat-val ${netNTD >= 0 ? 'pos' : 'neg'}" style="font-size:1.05rem">
-                    ${wan(netNTD)} NTD
+                    ${wan(netNTD)}
                 </div>
             </div>
         </div>`;
