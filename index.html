@@ -136,9 +136,10 @@
             margin-bottom: 10px;
         }
         /* Pie chart */
-        .pie-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; width: 100%; }
-        .pie-legend-item { font-size: 0.85rem; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-        .pie-legend-item span { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+        .pie-legend { display: grid; grid-template-columns: 10px 1fr auto 10px 1fr auto; gap: 7px 6px; align-items: center; width: 100%; }
+        .pie-legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .pie-legend-label { font-size: 0.85rem; white-space: nowrap; }
+        .pie-legend-amt { font-size: 0.75rem; color: var(--dim); text-align: right; white-space: nowrap; }
         /* Coupon calendar */
         .coupon-cal {
             display: grid;
@@ -2415,6 +2416,7 @@ function buildPayload() {
         reserve: reserveData, loan: loanData, initial_capital: initialCapital,
         pledge_rate: pledgeRate, pledge_amount: pledgeAmount,
         twelve_api_key: twelveApiKey,
+        portfolio_history: portfolioHistory,
     };
 }
 
@@ -2430,6 +2432,14 @@ function applyData(d) {
     if (d.pledge_rate   != null)  { pledgeRate   = parseFloat(d.pledge_rate)   || 0; savePledgeRate(); }
     if (d.pledge_amount != null)  { pledgeAmount = parseFloat(d.pledge_amount) || 0; savePledgeAmount(); }
     if (d.twelve_api_key)         { saveTwelveKey(d.twelve_api_key); }
+    if (Array.isArray(d.portfolio_history) && d.portfolio_history.length > 0) {
+        // 合併本機與雲端歷史，同日期以雲端為準，保留兩端獨有的記錄
+        const merged = {};
+        portfolioHistory.forEach(s => { merged[s.d] = s; });
+        d.portfolio_history.forEach(s => { merged[s.d] = s; });
+        portfolioHistory = Object.values(merged).sort((a, b) => a.d.localeCompare(b.d)).slice(-365);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(portfolioHistory));
+    }
 }
 
 function setCloudStatus(state, text) {
@@ -2684,7 +2694,9 @@ function renderPieChart() {
         paths += `<path d="M${ix1.toFixed(1)},${iy1.toFixed(1)} L${x1.toFixed(1)},${y1.toFixed(1)} A${R},${R} 0 ${lg},1 ${x2.toFixed(1)},${y2.toFixed(1)} L${ix2.toFixed(1)},${iy2.toFixed(1)} A${ri},${ri} 0 ${lg},0 ${ix1.toFixed(1)},${iy1.toFixed(1)} Z" fill="${d.color}" opacity="0.85"/>`;
         const pct = (d.value / total * 100).toFixed(1);
         const amt = Math.round(d.value / 10000) + '萬';
-        legend += `<div class="pie-legend-item"><span style="background:${d.color}"></span>${d.label}&nbsp;<strong>${pct}%</strong>&nbsp;<span style="color:var(--dim);font-size:0.75rem">${amt}</span></div>`;
+        legend += `<span class="pie-legend-dot" style="background:${d.color}"></span>
+                   <span class="pie-legend-label">${d.label}&nbsp;<strong>${pct}%</strong></span>
+                   <span class="pie-legend-amt">${amt}</span>`;
         ang = end;
     });
 
@@ -2695,7 +2707,7 @@ function renderPieChart() {
                 <text x="${cx}" y="${cy-4}" text-anchor="middle" fill="var(--dim)" font-size="8">含準備金</text>
                 <text x="${cx}" y="${cy+9}" text-anchor="middle" fill="var(--text)" font-size="10" font-weight="bold">${wan(total)}</text>
             </svg>
-            <div class="pie-legend">${legend}</div>
+            <div class="pie-legend" style="width:min(300px,100%)">${legend}</div>
         </div>`;
 }
 
