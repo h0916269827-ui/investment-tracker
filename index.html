@@ -1270,9 +1270,13 @@ async function fetchQuote(ticker) {
 
     if (!data) return null;
     try {
-        const meta = data.chart.result[0].meta;
-        const price = meta.regularMarketPrice;
-        const prev  = meta.chartPreviousClose ?? meta.previousClose ?? price;
+        const meta  = data.chart.result[0].meta;
+        const mktState = meta.marketState ?? 'CLOSED';
+        // 盤後優先，盤前次之，否則用收盤價
+        const price = (mktState === 'POST'  && meta.postMarketPrice)  ? meta.postMarketPrice
+                    : (mktState === 'PRE'   && meta.preMarketPrice)   ? meta.preMarketPrice
+                    : meta.regularMarketPrice;
+        const prev  = meta.chartPreviousClose ?? meta.previousClose ?? meta.regularMarketPrice;
         const chg   = price - prev;
         return {
             price,
@@ -1280,7 +1284,7 @@ async function fetchQuote(ticker) {
             change      : chg,
             changePct   : prev ? chg / prev * 100 : 0,
             currency    : meta.currency,
-            marketState : meta.marketState ?? 'CLOSED',
+            marketState : mktState,
             shortName   : meta.shortName ?? meta.longName ?? null,
         };
     } catch(_) { return null; }
