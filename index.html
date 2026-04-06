@@ -1446,8 +1446,9 @@ function renderSummary() {
                 <span class="loan-row-label">USD</span>
                 <span class="loan-amount" id="loan-val-USD" onclick="startEditLoan('USD')" title="點擊編輯借款美金金額">${loanData.USD ? '$' + loanData.USD.toLocaleString() : '$0'}</span>
             </div>
-            <div class="loan-edit-hint">
-                合計 ≈ ${wan(loanNTD)} NTD ｜ 淨資產 ${wan(netAsset)}
+            <div style="display:grid;grid-template-columns:3em 1fr;gap:2px 6px;margin-top:6px;font-size:0.6rem;color:var(--dim);line-height:1.9">
+                <span>合計</span><span>${wan(loanNTD)}</span>
+                <span>淨資產</span><span>${wan(netAsset)}</span>
             </div>
         </div>`;
 
@@ -1476,7 +1477,9 @@ function renderSummary() {
                     </span>
                 </div>
             </div>
-            <div class="loan-edit-hint">合計 ≈ ${wan(reserveNTD)} NTD</div>
+            <div style="display:grid;grid-template-columns:3em 1fr;gap:2px 6px;margin-top:6px;font-size:0.6rem;color:var(--dim);line-height:1.9">
+                <span>合計</span><span>${wan(reserveNTD)}</span>
+            </div>
         </div>`;
 
     const rateCard = `
