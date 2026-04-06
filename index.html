@@ -350,7 +350,7 @@
         }
 
         /* ── Editable loan card ── */
-        .card-loan { cursor: default; border-color: rgba(248,81,73,0.3); }
+        .card-loan { cursor: default; border-color: rgba(61,193,100,0.3); }
         .loan-row {
             display: flex;
             justify-content: space-between;
@@ -928,6 +928,7 @@ let loading = false;
 let hasError = false;
 let fetchAttempted = false;  // 至少嘗試過一次抓取
 let prevPrices = {};         // 上次抓取的價格，用於閃爍動畫
+let prevSummaryVals = {};    // 上次 summary 數值，用於卡片閃爍
 
 // Twelve Data API Key（美股 / 匯率報價用）
 const TWELVE_KEY_STORAGE = 'twelve_api_key';
@@ -1411,8 +1412,8 @@ function renderSummary() {
     const overallPct  = initialCapital > 0 ? (netAsset - initialCapital) / initialCapital * 100 : null;
     const overallGain = initialCapital > 0 ? netAsset - initialCapital : null;
 
-    const sc = (label, val, sub, c='') =>
-        `<div class="card"><div class="card-label">${label}</div><div class="card-val ${c}">${val}</div><div class="card-sub">${sub}</div></div>`;
+    const sc = (label, val, sub, c='', id='') =>
+        `<div class="card"><div class="card-label">${label}</div><div class="card-val ${c}"${id?` id="${id}"`:''}>${val}</div><div class="card-sub">${sub}</div></div>`;
 
     const returnCard = `
         <div class="card card-return">
@@ -1462,7 +1463,7 @@ function renderSummary() {
     const ntdR   = reserveData.NTD || 0;
     const usdR   = reserveData.USD || 0;
     const reserveCard = `
-        <div class="card card-loan" style="border-color:rgba(61,193,100,0.3)">
+        <div class="card card-loan" style="border-color:rgba(248,81,73,0.3)">
             <div class="card-label">準備金 <small style="font-size:0.6rem;color:var(--dim);text-transform:none">（點數字編輯）</small></div>
             <div class="loan-row">
                 <span class="loan-row-label">NTD</span>
@@ -1490,18 +1491,35 @@ function renderSummary() {
     const rateCard = `
         <div class="card">
             <div class="card-label">USD / TWD</div>
-            <div class="card-val">${fmtP(USD_TWD, 2)}</div>
+            <div class="card-val" id="sv-rate">${fmtP(USD_TWD, 2)}</div>
             <div class="card-sub">即時匯率</div>
         </div>`;
 
     // 順序：總市值 | 整體損益% | 未實現損益 | 今日損益 | 含準備金總資產 | 借款 | 準備金 | 匯率
+    const prev = prevSummaryVals;
     document.getElementById('summaryCards').innerHTML =
-        sc('總市值 (NTD)',    wan(totalNTD),          fmtP(totalNTD) + ' NTD') +
+        sc('總市值 (NTD)',    wan(totalNTD),          fmtP(totalNTD) + ' NTD', '', 'sv-total') +
         returnCard +
-        sc('未實現損益 (NTD)', fmt(unrealized, 0, '$'), fmt(unrPct, 2) + '%', cc(unrealized)) +
-        sc('今日損益 (NTD)',   fmt(dailyNTD, 0, '$'),  fmt(dailyPct, 2) + '%', cc(dailyNTD)) +
-        sc('含準備金總資產',   wan(grandTotal),         '準備金 ' + wan(reserveNTD)) +
+        sc('未實現損益 (NTD)', fmt(unrealized, 0, '$'), fmt(unrPct, 2) + '%', cc(unrealized), 'sv-unr') +
+        sc('今日損益 (NTD)',   fmt(dailyNTD, 0, '$'),  fmt(dailyPct, 2) + '%', cc(dailyNTD),  'sv-daily') +
+        sc('含準備金總資產',   wan(grandTotal),         '準備金 ' + wan(reserveNTD), '', 'sv-grand') +
         loanCard + reserveCard + rateCard;
+
+    // 卡片數值閃爍
+    const flashSv = (id, nv, ov) => {
+        if (ov == null || nv === ov) return;
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('flash-up', 'flash-down');
+        void el.offsetWidth;
+        el.classList.add(nv > ov ? 'flash-up' : 'flash-down');
+    };
+    flashSv('sv-total', totalNTD,   prev.total);
+    flashSv('sv-unr',   unrealized, prev.unr);
+    flashSv('sv-daily', dailyNTD,   prev.daily);
+    flashSv('sv-grand', grandTotal, prev.grand);
+    flashSv('sv-rate',  USD_TWD,    prev.rate);
+    prevSummaryVals = { total: totalNTD, unr: unrealized, daily: dailyNTD, grand: grandTotal, rate: USD_TWD };
 }
 
 // ── Render Heatmap ────────────────────────────────────────────────────
@@ -2401,7 +2419,7 @@ function renderReserve() {
     const grand  = invNTD + total;
 
     document.getElementById('reserveGrid').innerHTML = `
-        <div class="card card-loan" style="border-color:rgba(61,193,100,0.3)">
+        <div class="card card-loan" style="border-color:rgba(248,81,73,0.3)">
             <div class="card-label">準備金 <small style="font-size:0.6rem;color:var(--dim);text-transform:none">（點數字編輯）</small></div>
             <div class="loan-row">
                 <span class="loan-row-label">NTD</span>
