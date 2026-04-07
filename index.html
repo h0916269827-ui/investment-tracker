@@ -737,7 +737,7 @@
                     <th>今日漲跌%</th>
                     <th>今日損益 NTD</th>
                     <th>市值 NTD</th>
-                    <th><abbr title="賣出淨收入（×0.996672 係數）－買入成本">稅後損益(賣)</abbr></th>
+                    <th><abbr title="賣出淨收入（扣手續費＋證交稅）－買入成本（含手續費）">稅後損益(賣)</abbr></th>
                     <th>佔比</th>
                     <th><abbr title="(目前市值 − 含費成本) ÷ 含費成本">損益%</abbr></th>
                     <th class="th-op"></th>
@@ -836,9 +836,10 @@
 const CFG = {
 
     // ── 台股手續費設定 ────────────────────────────────────────────────
-    tw_fee_rate    : 0.001425,  // 手續費率 0.1425%
-    tw_fee_discount: 0.6,       // 手續費折扣 (六折 = 0.6)
-    tw_tx_tax      : 0.003,     // 賣出證交稅 0.3%（一般股票）
+    tw_fee_rate         : 0.001425,  // 手續費率 0.1425%
+    tw_fee_discount     : 0.2875,    // 個人戶手續費折扣（國泰電子下單 28.75% of 0.1425%）
+    tw_fee_discount_corp: 0.69825,   // 公司戶手續費折扣（國泰 69.825% of 0.1425%）
+    tw_tx_tax           : 0.003,     // 賣出證交稅 0.3%（一般股票）
 
     // ── 台股持股 ──────────────────────────────────────────────────────
     // ticker : Yahoo Finance 代號（上市 + ".TW"，上櫃 + ".TWO"）
@@ -1206,13 +1207,13 @@ function hmColor(pct) {
 
 // ── Fee & Tax ─────────────────────────────────────────────────────────
 
-const TW_SELL_COEF      = 0.996672; // 個人戶賣出係數
-const TW_SELL_COEF_CORP = 0.996601; // 公司戶賣出係數
-
 function twAfterTaxPnL(h, price) {
-    const shares = h.lots * 1000;
-    const coef   = h.account === 'corp' ? TW_SELL_COEF_CORP : TW_SELL_COEF;
-    return price * shares * coef - h.cost * shares;
+    const shares    = h.lots * 1000;
+    const disc      = h.account === 'corp' ? CFG.tw_fee_discount_corp : CFG.tw_fee_discount;
+    const feeRate   = CFG.tw_fee_rate * disc;                     // 折後手續費率
+    const sellCoef  = 1 - feeRate - CFG.tw_tx_tax;               // 賣出淨收係數
+    const buyCost   = h.cost * shares * (1 + feeRate);           // 含買入手續費的成本
+    return price * shares * sellCoef - buyCost;
 }
 
 // ── Corp bond helpers ─────────────────────────────────────────────────
@@ -1839,11 +1840,13 @@ function buildTwRow(h, idx, totalNTD) {
     const price  = q?.price ?? h.cost;
     const shares = h.lots * 1000;
     const val    = price * shares;
-    const cost   = h.cost * shares;
-    const daily  = (q?.change ?? 0) * shares;
-    const afterT = twAfterTaxPnL(h, price);
-    const wt     = totalNTD > 0 ? val / totalNTD * 100 : 0;
-    const pnlPct = cost > 0 ? afterT / cost * 100 : 0;
+    const disc    = h.account === 'corp' ? CFG.tw_fee_discount_corp : CFG.tw_fee_discount;
+    const feeRate = CFG.tw_fee_rate * disc;
+    const cost    = h.cost * shares * (1 + feeRate);   // 含買入手續費的總成本
+    const daily   = (q?.change ?? 0) * shares;
+    const afterT  = twAfterTaxPnL(h, price);
+    const wt      = totalNTD > 0 ? val / totalNTD * 100 : 0;
+    const pnlPct  = cost > 0 ? afterT / cost * 100 : 0;
     const exclCls = h.excluded ? ' excl-row' : '';
     return `<tr id="tw-row-${idx}" data-idx="${idx}"${exclCls ? ` class="${exclCls.trim()}"` : ''}
         ondragstart="twRowDragStart(event,${idx})"
