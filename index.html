@@ -838,7 +838,7 @@ const CFG = {
     // ── 台股手續費設定 ────────────────────────────────────────────────
     tw_fee_rate         : 0.001425,  // 手續費率 0.1425%
     tw_fee_discount     : 0.2875,    // 個人戶手續費折扣（國泰電子下單 28.75% of 0.1425%）
-    tw_fee_discount_corp: 0.69825,   // 公司戶手續費折扣（國泰 69.825% of 0.1425%）
+    tw_fee_discount_corp: 0.6,        // 公司戶手續費折扣（六折，均成本已含買入手續費）
     tw_tx_tax           : 0.003,     // 賣出證交稅 0.3%（一般股票）
 
     // ── 台股持股 ──────────────────────────────────────────────────────
@@ -1208,11 +1208,15 @@ function hmColor(pct) {
 // ── Fee & Tax ─────────────────────────────────────────────────────────
 
 function twAfterTaxPnL(h, price) {
-    const shares    = h.lots * 1000;
-    const disc      = h.account === 'corp' ? CFG.tw_fee_discount_corp : CFG.tw_fee_discount;
-    const feeRate   = CFG.tw_fee_rate * disc;                     // 折後手續費率
-    const sellCoef  = 1 - feeRate - CFG.tw_tx_tax;               // 賣出淨收係數
-    const buyCost   = h.cost * shares * (1 + feeRate);           // 含買入手續費的成本
+    const shares   = h.lots * 1000;
+    const disc     = h.account === 'corp' ? CFG.tw_fee_discount_corp : CFG.tw_fee_discount;
+    const feeRate  = CFG.tw_fee_rate * disc;
+    const sellCoef = 1 - feeRate - CFG.tw_tx_tax;
+    // 公司戶：均成本已含買入手續費，不再加計
+    // 個人戶：均成本為純市價，加計買入手續費
+    const buyCost  = h.account === 'corp'
+        ? h.cost * shares
+        : h.cost * shares * (1 + feeRate);
     return price * shares * sellCoef - buyCost;
 }
 
@@ -1842,7 +1846,9 @@ function buildTwRow(h, idx, totalNTD) {
     const val    = price * shares;
     const disc    = h.account === 'corp' ? CFG.tw_fee_discount_corp : CFG.tw_fee_discount;
     const feeRate = CFG.tw_fee_rate * disc;
-    const cost    = h.cost * shares * (1 + feeRate);   // 含買入手續費的總成本
+    const cost    = h.account === 'corp'
+        ? h.cost * shares                      // 公司戶：均成本已含手續費
+        : h.cost * shares * (1 + feeRate);     // 個人戶：均成本加計買入手續費
     const daily   = (q?.change ?? 0) * shares;
     const afterT  = twAfterTaxPnL(h, price);
     const wt      = totalNTD > 0 ? val / totalNTD * 100 : 0;
