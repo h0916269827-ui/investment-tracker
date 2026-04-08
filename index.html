@@ -1273,90 +1273,96 @@ function calcTotalNTD() {
 
 // ── TWSE / TPEX 即時報價（台股專用）──────────────────────────────────
 
+function isTwMarketOpen() {
+    // 台灣時間是否在盤中（週一至週五 09:00–13:30）
+    const tw = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Taipei' }));
+    const d = tw.getDay();
+    if (d === 0 || d === 6) return false;
+    const mins = tw.getHours() * 60 + tw.getMinutes();
+    return mins >= 540 && mins < 810; // 9:00 ~ 13:30
+}
+
 async function fetchTwQuote(ticker) {
     // ticker 格式：2330.TW（上市）或 1815.TWO（上櫃）
     const code  = ticker.split('.')[0];
     const isOTC = ticker.toUpperCase().endsWith('.TWO');
+    const exCh  = (isOTC ? 'otc_' : 'tse_') + code + '.tw';
+    const rtUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${exCh}&json=1&delay=0`;
 
-    // ── 1. TWSE/TPEX 即時 API（盤中有效）────────────────────────────
-    try {
-        const exCh = (isOTC ? 'otc_' : 'tse_') + code + '.tw';
-        const url  = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${exCh}&json=1&delay=0`;
-        const r    = await fetch(url, { signal: AbortSignal.timeout(6000) });
-        if (r.ok) {
-            const data = await r.json();
-            const msg  = data.msgArray?.[0];
-            if (msg) {
-                const hasRT = msg.z && msg.z !== '-';
-                if (hasRT) {
-                    // 盤中即時價格
-                    const price = parseFloat(msg.z);
-                    const prev  = parseFloat(msg.y) || price;
-                    const chg   = price - prev;
-                    if (price > 0) return {
-                        price, prevClose: prev, change: chg,
-                        changePct: prev ? chg / prev * 100 : 0,
-                        currency: 'TWD', marketState: 'REGULAR',
-                        shortName: msg.n || null,
-                    };
-                }
-            }
-        }
-    } catch(_) {}
-
-    // ── 2. 盤後 API：今日收盤價（收盤後才有資料）──────────────────
-    try {
-        if (!isOTC) {
-            // 上市：TWSE 每日交易資訊
-            const url  = `https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?stockNo=${code}&response=json`;
-            const r    = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    // ── 1. TWSE 即時 API（直接 + allorigins 代理備援）────────────────
+    let msg = null;
+    const rtUrls = [rtUrl, `https://api.allorigins.win/raw?url=${encodeURIComponent(rtUrl)}`];
+    for (const url of rtUrls) {
+        if (msg) break;
+        try {
+            const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
             if (r.ok) {
                 const data = await r.json();
-                if (data.data?.length > 0) {
-                    const rows  = data.data;
-                    const last  = rows[rows.length - 1];
-                    // cols: [日期,成交股數,成交金額,開盤,最高,最低,收盤,漲跌,筆數]
-                    const price = parseFloat(last[6].replace(/,/g, ''));
-                    // 漲跌差：去除 ▲▼ 符號，負漲跌前面有 X 或 -
-                    const chgRaw = last[7].replace(/,/g, '').replace(/[▲△]/g, '').replace(/[▼▽X]/g, '-').trim();
-                    const chg   = parseFloat(chgRaw) || 0;
-                    const prev  = price - chg;
-                    if (price > 0) return {
-                        price, prevClose: prev > 0 ? prev : price,
-                        change: chg,
-                        changePct: prev > 0 ? chg / prev * 100 : 0,
-                        currency: 'TWD', marketState: 'CLOSED',
-                        shortName: null,
-                    };
-                }
+                if (data.msgArray?.length) msg = data.msgArray[0];
             }
-        } else {
-            // 上櫃：TPEX 盤後資料
-            const today = new Date();
-            const roc   = today.getFullYear() - 1911;
-            const mm    = String(today.getMonth() + 1).padStart(2, '0');
-            const dd    = String(today.getDate()).padStart(2, '0');
-            const url   = `https://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_result.php?l=zh-tw&o=json&s=0,asc&d=${roc}%2F${mm}%2F${dd}&stkno=${code}`;
-            const r     = await fetch(url, { signal: AbortSignal.timeout(8000) });
-            if (r.ok) {
-                const data = await r.json();
-                if (data.aaData?.length > 0) {
-                    const last  = data.aaData[data.aaData.length - 1];
-                    const price = parseFloat(last[6].replace(/,/g, ''));
-                    const chgRaw = last[7]?.replace(/,/g, '').replace(/[▲△]/g, '').replace(/[▼▽X]/g, '-').trim();
-                    const chg   = parseFloat(chgRaw) || 0;
-                    const prev  = price - chg;
-                    if (price > 0) return {
-                        price, prevClose: prev > 0 ? prev : price,
-                        change: chg,
-                        changePct: prev > 0 ? chg / prev * 100 : 0,
-                        currency: 'TWD', marketState: 'CLOSED',
-                        shortName: null,
-                    };
-                }
-            }
+        } catch(_) {}
+    }
+    if (msg) {
+        const hasRT = msg.z && msg.z !== '-';
+        if (hasRT) {
+            const price = parseFloat(msg.z);
+            const prev  = parseFloat(msg.y) || price;
+            const chg   = price - prev;
+            if (price > 0) return {
+                price, prevClose: prev, change: chg,
+                changePct: prev ? chg / prev * 100 : 0,
+                currency: 'TWD', marketState: 'REGULAR',
+                shortName: msg.n || null,
+            };
         }
-    } catch(_) {}
+    }
+
+    // ── 2. 盤後 API（僅盤後呼叫；盤中此 API 只有昨日資料，跳過）──
+    if (!isTwMarketOpen()) {
+        try {
+            if (!isOTC) {
+                const url  = `https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?stockNo=${code}&response=json`;
+                const r    = await fetch(url, { signal: AbortSignal.timeout(8000) });
+                if (r.ok) {
+                    const data = await r.json();
+                    if (data.data?.length > 0) {
+                        const last   = data.data[data.data.length - 1];
+                        const price  = parseFloat(last[6].replace(/,/g, ''));
+                        const chgRaw = last[7].replace(/,/g, '').replace(/[▲△]/g, '').replace(/[▼▽X]/g, '-').trim();
+                        const chg    = parseFloat(chgRaw) || 0;
+                        const prev   = price - chg;
+                        if (price > 0) return {
+                            price, prevClose: prev > 0 ? prev : price,
+                            change: chg, changePct: prev > 0 ? chg / prev * 100 : 0,
+                            currency: 'TWD', marketState: 'CLOSED', shortName: null,
+                        };
+                    }
+                }
+            } else {
+                const today = new Date();
+                const roc   = today.getFullYear() - 1911;
+                const mm    = String(today.getMonth() + 1).padStart(2, '0');
+                const dd    = String(today.getDate()).padStart(2, '0');
+                const url   = `https://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_result.php?l=zh-tw&o=json&s=0,asc&d=${roc}%2F${mm}%2F${dd}&stkno=${code}`;
+                const r     = await fetch(url, { signal: AbortSignal.timeout(8000) });
+                if (r.ok) {
+                    const data = await r.json();
+                    if (data.aaData?.length > 0) {
+                        const last   = data.aaData[data.aaData.length - 1];
+                        const price  = parseFloat(last[6].replace(/,/g, ''));
+                        const chgRaw = last[7]?.replace(/,/g, '').replace(/[▲△]/g, '').replace(/[▼▽X]/g, '-').trim();
+                        const chg    = parseFloat(chgRaw) || 0;
+                        const prev   = price - chg;
+                        if (price > 0) return {
+                            price, prevClose: prev > 0 ? prev : price,
+                            change: chg, changePct: prev > 0 ? chg / prev * 100 : 0,
+                            currency: 'TWD', marketState: 'CLOSED', shortName: null,
+                        };
+                    }
+                }
+            }
+        } catch(_) {}
+    }
 
     // ── 3. 最終備援：Yahoo Finance ────────────────────────────────
     return fetchQuote(ticker);
