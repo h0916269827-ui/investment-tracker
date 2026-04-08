@@ -1337,7 +1337,7 @@ async function fetchFugleQuote(ticker) {
             change     : chg,
             changePct  : prev ? chg / prev * 100 : 0,
             currency   : 'TWD',
-            marketState: d.tradeSession === 'NORMAL' ? 'REGULAR' : 'CLOSED',
+            marketState: isTwMarketOpen() ? 'REGULAR' : 'CLOSED',
             shortName  : d.name || null,
         };
     } catch(e) { console.warn('Fugle fetch error:', e.message); return null; }
@@ -1390,7 +1390,7 @@ async function fetchTwQuote(ticker) {
             if (price > 0) return {
                 price, prevClose: prev, change: chg,
                 changePct: prev ? chg / prev * 100 : 0,
-                currency: 'TWD', marketState: 'REGULAR',
+                currency: 'TWD', marketState: isTwMarketOpen() ? 'REGULAR' : 'CLOSED',
                 shortName: msg.n || null,
             };
         }
@@ -1503,7 +1503,7 @@ async function fetchTwelveAll() {
     const symbols   = [...usTickers, 'USD/TWD'];
     if (!symbols.length) return;
     try {
-        const url  = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(symbols.join(','))}&apikey=${twelveApiKey}`;
+        const url  = `https://api.twelvedata.com/quote?symbol=${symbols.join(',')}&apikey=${twelveApiKey}`;
         const r    = await fetch(url, { signal: AbortSignal.timeout(12000) });
         if (!r.ok) return;
         const data = await r.json();
@@ -1706,7 +1706,7 @@ function renderSummary() {
         </div>`;
 
     const dlC = cc(dailyNTD);
-    const hasFx = fxChange !== 0;
+    const hasFx = USD_TWD > 0;
     const dailyCard = `
         <div class="card">
             <div class="card-label">今日損益 (NTD)</div>
@@ -3156,7 +3156,8 @@ async function doRefresh(force = false) {
             renderAll();
             if (needFetch) {
                 applyPriceFlash();
-                saveSnapshot();   // 每次抓到新報價就更新今日快照
+                saveSnapshot();       // 每次抓到新報價就更新今日快照
+                scheduleCloudSync();  // 確保每次更新都觸發雲端存檔
             }
         }
     } finally {
