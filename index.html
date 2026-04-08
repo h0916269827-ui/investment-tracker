@@ -962,7 +962,13 @@ try {
         fugleApiKey = _stored || decodeFugleDefault();
     }
 } catch(_) { fugleApiKey = decodeFugleDefault(); }
-function saveFugleKey(key) { fugleApiKey = key.trim(); localStorage.setItem(FUGLE_KEY_STORAGE, fugleApiKey); if (typeof scheduleCloudSync === 'function') scheduleCloudSync(); }
+function saveFugleKey(key) {
+    const k = (key || '').trim();
+    if (!k || /[^\x00-\xFF]/.test(k)) return; // 拒絕含非 ASCII 的壞 key
+    fugleApiKey = k;
+    localStorage.setItem(FUGLE_KEY_STORAGE, k);
+    if (typeof scheduleCloudSync === 'function') scheduleCloudSync();
+}
 function saveFugleKeyFromModal() {
     const v = document.getElementById('fugleKeyInput')?.value?.trim() || '';
     saveFugleKey(v);
@@ -2663,7 +2669,7 @@ function applyData(d) {
     if (d.pledge_rate   != null)  { pledgeRate   = parseFloat(d.pledge_rate)   || 0; savePledgeRate(); }
     if (d.pledge_amount != null)  { pledgeAmount = parseFloat(d.pledge_amount) || 0; savePledgeAmount(); }
     if (d.twelve_api_key)         { saveTwelveKey(d.twelve_api_key); }
-    if (d.fugle_api_key)          { saveFugleKey(d.fugle_api_key); }
+    if (d.fugle_api_key)          { saveFugleKey(d.fugle_api_key); } // saveFugleKey 內部已驗證，壞 key 會被忽略
     if (Array.isArray(d.portfolio_history) && d.portfolio_history.length > 0) {
         // 合併本機與雲端歷史，同日期以雲端為準，保留兩端獨有的記錄
         const merged = {};
@@ -2727,6 +2733,9 @@ async function cloudLoad() {
         const content = data.files?.['portfolio.json']?.content;
         if (!content) return false;
         applyData(JSON.parse(content));
+        // 若雲端存的 Fugle key 是壞的，applyData 會忽略它（saveFugleKey 守衛）
+        // 此時 fugleApiKey 仍是本地解碼的好 key，排程同步以覆寫雲端壞 key
+        scheduleCloudSync();
         return true;
     } catch(_) { return false; }
 }
