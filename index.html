@@ -243,7 +243,8 @@
             padding: 4px 8px;
             border-radius: 5px;
             font-size: 0.82rem;
-            width: 80px;
+            width: 100%;
+            display: block;
             text-align: right;
             font-family: var(--font);
         }
@@ -409,13 +410,14 @@
             padding: 4px 6px;
             border-radius: 5px;
             font-size: 0.8rem;
-            width: 78px;
+            width: 100%;          /* 撐滿欄寬，header 才能對齊 */
+            display: block;       /* 確保 width:100% 生效 */
             text-align: right;
             font-family: var(--font);
             outline: none;
         }
         .tbl-input:focus { border-color: var(--accent); }
-        .tbl-input-wide { width: 100px; }
+        .tbl-input-wide { width: 100%; }
 
         /* ── Row action buttons ── */
         .btn-excl {
@@ -735,7 +737,7 @@
         <table>
             <thead>
                 <tr>
-                    <th>名稱 / 代號</th>
+                    <th style="padding-left:26px">名稱 / 代號</th>
                     <th>張數</th>
                     <th>均成本/股</th>
                     <th>現價</th>
@@ -768,7 +770,7 @@
         <table>
             <thead>
                 <tr>
-                    <th>名稱 / 代號</th>
+                    <th style="padding-left:26px">名稱 / 代號</th>
                     <th>股數</th>
                     <th>均成本 USD</th>
                     <th>現價 USD</th>
