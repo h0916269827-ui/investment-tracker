@@ -949,7 +949,7 @@ const FUGLE_KEY_STORAGE = 'fugle_api_key';
 const FUGLE_KEY_DEFAULT = 'OGRlNjdhYzYtNzVlNS00MWY0LWEyNmItMmE3ZDYyOWJmNGMxIDAyYmQwMmE4LTk0NTItNDZmNy04ZDg3LTNiYTE4ODUxZDU4Zg==';
 let fugleApiKey = '';
 try { fugleApiKey = localStorage.getItem(FUGLE_KEY_STORAGE) || FUGLE_KEY_DEFAULT; } catch(_) { fugleApiKey = FUGLE_KEY_DEFAULT; }
-function saveFugleKey(key) { fugleApiKey = key.trim(); localStorage.setItem(FUGLE_KEY_STORAGE, fugleApiKey); }
+function saveFugleKey(key) { fugleApiKey = key.trim(); localStorage.setItem(FUGLE_KEY_STORAGE, fugleApiKey); if (typeof scheduleCloudSync === 'function') scheduleCloudSync(); }
 function saveFugleKeyFromModal() {
     const v = document.getElementById('fugleKeyInput')?.value?.trim() || '';
     saveFugleKey(v);
@@ -2577,6 +2577,7 @@ function buildPayload() {
         reserve: reserveData, loan: loanData, initial_capital: initialCapital,
         pledge_rate: pledgeRate, pledge_amount: pledgeAmount,
         twelve_api_key: twelveApiKey,
+        fugle_api_key: fugleApiKey,
         portfolio_history: portfolioHistory,
     };
 }
@@ -2593,6 +2594,7 @@ function applyData(d) {
     if (d.pledge_rate   != null)  { pledgeRate   = parseFloat(d.pledge_rate)   || 0; savePledgeRate(); }
     if (d.pledge_amount != null)  { pledgeAmount = parseFloat(d.pledge_amount) || 0; savePledgeAmount(); }
     if (d.twelve_api_key)         { saveTwelveKey(d.twelve_api_key); }
+    if (d.fugle_api_key)          { saveFugleKey(d.fugle_api_key); }
     if (Array.isArray(d.portfolio_history) && d.portfolio_history.length > 0) {
         // 合併本機與雲端歷史，同日期以雲端為準，保留兩端獨有的記錄
         const merged = {};
