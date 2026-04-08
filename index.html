@@ -593,6 +593,11 @@
         <input class="modal-input" id="cloudTokenInput" type="password" placeholder="ghp_xxxxxxxxxxxx">
         <div class="modal-label">Gist ID <span style="color:var(--dim);font-size:0.65rem">（第一次留空，系統自動建立）</span></div>
         <input class="modal-input" id="cloudGistInput" placeholder="自動填入後請記下此 ID">
+        <div class="modal-label" style="margin-top:14px">Fugle API Key <span style="color:var(--dim);font-size:0.65rem">（台股即時報價，<a href="https://developer.fugle.tw" target="_blank" style="color:var(--accent)">developer.fugle.tw</a> 免費申請）</span></div>
+        <div style="display:flex;gap:6px;align-items:center">
+            <input class="modal-input" id="fugleKeyInput" type="password" placeholder="貼入 Fugle API Key" style="flex:1;margin-bottom:0">
+            <button class="btn" onclick="saveFugleKeyFromModal()" style="white-space:nowrap;padding:6px 12px">儲存</button>
+        </div>
         <div class="modal-label" style="margin-top:14px">Twelve Data API Key <span style="color:var(--dim);font-size:0.65rem">（美股 / 匯率報價，<a href="https://twelvedata.com" target="_blank" style="color:var(--accent)">twelvedata.com</a> 免費申請）</span></div>
         <div style="display:flex;gap:6px;align-items:center">
             <input class="modal-input" id="twelveKeyInput" type="password" placeholder="貼入 API Key" style="flex:1;margin-bottom:0">
@@ -939,6 +944,19 @@ let fetchAttempted = false;  // 至少嘗試過一次抓取
 let prevPrices = {};         // 上次抓取的價格，用於閃爍動畫
 let prevSummaryVals = {};    // 上次 summary 數值，用於卡片閃爍
 
+// Fugle API Key（台股即時報價用）
+const FUGLE_KEY_STORAGE = 'fugle_api_key';
+const FUGLE_KEY_DEFAULT = 'OGRlNjdhYzYtNzVlNS00MWY0LWEyNmItMmE3ZDYyOWJmNGMxIDAyYmQwMmE4LTk0NTItNDZmNy04ZDg3LTNiYTE4ODUxZDU4Zg==';
+let fugleApiKey = '';
+try { fugleApiKey = localStorage.getItem(FUGLE_KEY_STORAGE) || FUGLE_KEY_DEFAULT; } catch(_) { fugleApiKey = FUGLE_KEY_DEFAULT; }
+function saveFugleKey(key) { fugleApiKey = key.trim(); localStorage.setItem(FUGLE_KEY_STORAGE, fugleApiKey); }
+function saveFugleKeyFromModal() {
+    const v = document.getElementById('fugleKeyInput')?.value?.trim() || '';
+    saveFugleKey(v);
+    const hint = document.getElementById('cloudModalHint');
+    if (hint) { hint.textContent = 'Fugle API Key 已儲存。'; setTimeout(() => { hint.innerHTML = hint._orig || ''; }, 2000); }
+}
+
 // Twelve Data API Key（美股 / 匯率報價用）
 const TWELVE_KEY_STORAGE = 'twelve_api_key';
 let twelveApiKey = '';
@@ -1271,6 +1289,35 @@ function calcTotalNTD() {
     return t;
 }
 
+// ── Fugle 即時報價（台股，需 API Key）────────────────────────────────
+
+async function fetchFugleQuote(ticker) {
+    if (!fugleApiKey) return null;
+    const code = ticker.split('.')[0];
+    try {
+        const url = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/${code}`;
+        const r   = await fetch(url, {
+            headers: { 'X-API-KEY': fugleApiKey },
+            signal : AbortSignal.timeout(8000),
+        });
+        if (!r.ok) return null;
+        const d = await r.json();
+        const price = d.lastPrice ?? d.closePrice;
+        if (!price) return null;
+        const prev  = d.previousClose ?? price;
+        const chg   = d.change ?? (price - prev);
+        return {
+            price,
+            prevClose  : prev,
+            change     : chg,
+            changePct  : prev ? chg / prev * 100 : 0,
+            currency   : 'TWD',
+            marketState: d.tradeSession === 'NORMAL' ? 'REGULAR' : 'CLOSED',
+            shortName  : d.name || null,
+        };
+    } catch(_) { return null; }
+}
+
 // ── TWSE / TPEX 即時報價（台股專用）──────────────────────────────────
 
 function isTwMarketOpen() {
@@ -1286,6 +1333,13 @@ async function fetchTwQuote(ticker) {
     // ticker 格式：2330.TW（上市）或 1815.TWO（上櫃）
     const code  = ticker.split('.')[0];
     const isOTC = ticker.toUpperCase().endsWith('.TWO');
+
+    // ── 0. Fugle（有 Key 優先使用，最穩定）──────────────────────────
+    if (fugleApiKey) {
+        const q = await fetchFugleQuote(ticker);
+        if (q) return q;
+    }
+
     const exCh  = (isOTC ? 'otc_' : 'tse_') + code + '.tw';
     const rtUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${exCh}&json=1&delay=0`;
 
