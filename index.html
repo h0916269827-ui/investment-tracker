@@ -1292,6 +1292,7 @@ function calcTotalNTD() {
 // ── Fugle 即時報價（台股，需 API Key）────────────────────────────────
 
 async function fetchFugleQuote(ticker) {
+    console.log('Fugle key:', fugleApiKey ? '有設定(長度' + fugleApiKey.length + ')' : '空白');
     if (!fugleApiKey) return null;
     const code = ticker.split('.')[0];
     try {
@@ -1302,7 +1303,7 @@ async function fetchFugleQuote(ticker) {
         });
         if (!r.ok) { console.warn(`Fugle API ${r.status}:`, await r.text().catch(()=>'')); return null; }
         const d = await r.json();
-        console.log('Fugle response:', JSON.stringify(d).slice(0, 200));
+        console.log('Fugle response:', JSON.stringify(d).slice(0, 300));
         const price = d.lastPrice ?? d.closePrice;
         if (!price) return null;
         const prev  = d.previousClose ?? price;
@@ -1316,7 +1317,7 @@ async function fetchFugleQuote(ticker) {
             marketState: d.tradeSession === 'NORMAL' ? 'REGULAR' : 'CLOSED',
             shortName  : d.name || null,
         };
-    } catch(_) { return null; }
+    } catch(e) { console.warn('Fugle fetch error:', e.message); return null; }
 }
 
 // ── TWSE / TPEX 即時報價（台股專用）──────────────────────────────────
