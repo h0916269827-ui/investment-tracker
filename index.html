@@ -1300,8 +1300,9 @@ async function fetchFugleQuote(ticker) {
             headers: { 'X-API-KEY': fugleApiKey },
             signal : AbortSignal.timeout(8000),
         });
-        if (!r.ok) return null;
+        if (!r.ok) { console.warn(`Fugle API ${r.status}:`, await r.text().catch(()=>'')); return null; }
         const d = await r.json();
+        console.log('Fugle response:', JSON.stringify(d).slice(0, 200));
         const price = d.lastPrice ?? d.closePrice;
         if (!price) return null;
         const prev  = d.previousClose ?? price;
@@ -2671,6 +2672,7 @@ function scheduleCloudSync() {
 function showCloudModal() {
     document.getElementById('cloudTokenInput').value = cloudCfg.token || '';
     document.getElementById('cloudGistInput').value  = cloudCfg.gistId || '';
+    document.getElementById('fugleKeyInput').value   = fugleApiKey || '';
     document.getElementById('twelveKeyInput').value  = twelveApiKey || '';
     document.getElementById('cloudModal').classList.add('open');
 }
