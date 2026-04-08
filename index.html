@@ -772,7 +772,7 @@
                     <th>股數</th>
                     <th>均成本 USD</th>
                     <th>現價 USD</th>
-                    <th>今日漲跌%</th>
+                    <th>今日漲跌<br><small style="font-weight:400;letter-spacing:0;color:var(--dim)">漲幅%</small></th>
                     <th>今日損益 USD</th>
                     <th>未實現損益 USD</th>
                     <th>市值 NTD</th>
@@ -948,7 +948,16 @@ let prevSummaryVals = {};    // 上次 summary 數值，用於卡片閃爍
 const FUGLE_KEY_STORAGE = 'fugle_api_key';
 const FUGLE_KEY_DEFAULT = 'NDk0NGEyZTEtMGJiMy00MjM4LWI3M2YtNWUwNTcxZDM5OTU0IDc5Y2VmMTg3LWVjZDUtNGM2Ny1iOTBkLTMxN2E2ZmI2MDZkZQ==';
 let fugleApiKey = '';
-try { fugleApiKey = localStorage.getItem(FUGLE_KEY_STORAGE) || FUGLE_KEY_DEFAULT; } catch(_) { fugleApiKey = FUGLE_KEY_DEFAULT; }
+try {
+    const _stored = localStorage.getItem(FUGLE_KEY_STORAGE);
+    // 若 localStorage 存的 key 含非 ASCII（壞掉的舊 key），自動清除並用預設值
+    if (_stored && /[^\x00-\xFF]/.test(_stored)) {
+        localStorage.removeItem(FUGLE_KEY_STORAGE);
+        fugleApiKey = FUGLE_KEY_DEFAULT;
+    } else {
+        fugleApiKey = _stored || FUGLE_KEY_DEFAULT;
+    }
+} catch(_) { fugleApiKey = FUGLE_KEY_DEFAULT; }
 function saveFugleKey(key) { fugleApiKey = key.trim(); localStorage.setItem(FUGLE_KEY_STORAGE, fugleApiKey); if (typeof scheduleCloudSync === 'function') scheduleCloudSync(); }
 function saveFugleKeyFromModal() {
     const v = document.getElementById('fugleKeyInput')?.value?.trim() || '';
@@ -2145,48 +2154,31 @@ function hideAddTwRow() {
     document.getElementById('tw-add-row')?.remove();
 }
 
-// 專用：只取股票名稱（多重備援）
+// 專用：只取台股中文名稱
 async function fetchTwStockName(code) {
-    const suffixes = ['.TW', '.TWO'];
-
-    // 1. Yahoo Finance v8/chart（較穩定，有 meta.shortName）
-    for (const s of suffixes) {
+    // 1. Fugle API（直接回傳中文名稱 d.name，最準確）
+    const validKey = fugleApiKey && !/[^\x00-\xFF]/.test(fugleApiKey) ? fugleApiKey : null;
+    if (validKey) {
         try {
-            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(code + s)}?interval=1d&range=1d`;
-            const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
+            const r = await fetch(
+                `https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/${code}`,
+                { headers: { 'X-API-KEY': validKey }, signal: AbortSignal.timeout(6000) }
+            );
             if (r.ok) {
                 const d = await r.json();
-                const name = d.chart?.result?.[0]?.meta?.shortName
-                          || d.chart?.result?.[0]?.meta?.longName;
-                if (name) return name;
+                if (d.name) return d.name;
             }
         } catch(_) {}
     }
 
-    // 2. Yahoo Finance v1/search
-    try {
-        const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(code)}.TW&quotesCount=5&newsCount=0`;
-        const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
-        if (r.ok) {
-            const d = await r.json();
-            const hit = d.quotes?.find(q => q.symbol === code + '.TW' || q.symbol === code + '.TWO');
-            if (hit?.shortname || hit?.longname) return hit.shortname || hit.longname;
-        }
-    } catch(_) {}
-
-    // 3. Yahoo Finance v7/quote（原有邏輯）
-    for (const s of suffixes) {
-        try {
-            const q = await fetchQuote(code + s);
-            if (q?.shortName) return q.shortName;
-        } catch(_) {}
-    }
-
-    // 4. allorigins 代理 TWSE
+    // 2. allorigins 代理 TWSE（msg.n = 中文名稱，直連被 CORS 擋）
     for (const ex of ['tse', 'otc']) {
         try {
             const twseUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${ex}_${code}.tw&json=1&delay=0`;
-            const r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(twseUrl)}`, { signal: AbortSignal.timeout(8000) });
+            const r = await fetch(
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(twseUrl)}`,
+                { signal: AbortSignal.timeout(8000) }
+            );
             if (r.ok) {
                 const d = await r.json();
                 const name = d.msgArray?.[0]?.n;
@@ -2287,7 +2279,7 @@ function buildUsRow(h, idx, totalNTD) {
                    title="每股均成本（USD）">
         </td>
         <td>${q ? `$${fmtP(q.price)}<div class="tbl-sub">≈ ${wan(q.price * USD_TWD)} NTD</div>` : (fetchAttempted ? '<span class="neu">—</span>' : '<span class="shimmer"></span>')}</td>
-        <td class="${cc(q?.changePct)}">${q ? fmt(q.changePct, 2) + '%' : '—'}</td>
+        <td class="${cc(q?.changePct)}">${q ? `${fmt(q.change, 2)}<div class="tbl-sub">${fmt(q.changePct, 2)}%</div>` : '—'}</td>
         <td class="${cc(daily)}">${q ? `${fmt(daily, 2, '$')}<div class="tbl-sub">${fmt(daily * USD_TWD, 0, '$')} NTD</div>` : '—'}</td>
         <td class="${cc(unreal)}">${fmt(unreal, 2, '$')}<div class="tbl-sub">${fmt(unreal * USD_TWD, 0, '$')} NTD</div></td>
         <td>${wan(val * USD_TWD)}</td>
