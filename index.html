@@ -739,7 +739,7 @@
                     <th>張數</th>
                     <th>均成本/股</th>
                     <th>現價</th>
-                    <th>今日漲跌%</th>
+                    <th>今日漲跌<br><small style="font-weight:400;letter-spacing:0;color:var(--dim)">漲幅%</small></th>
                     <th>今日損益 NTD</th>
                     <th>市值 NTD</th>
                     <th><abbr title="賣出淨收入（扣手續費＋證交稅）－買入成本（含手續費）">稅後損益(賣)</abbr></th>
@@ -1554,6 +1554,24 @@ async function fetchAllQuotes() {
     hasError = err > 0;
 }
 
+// ── 今日日期（台灣時區）──────────────────────────────────────────────
+function todayStr() {
+    return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
+}
+
+// 當日損益：新增當天用 (現價-成本)×股數，隔日起用正常 change
+function twDailyPnL(h, q) {
+    const price  = q?.price ?? h.cost;
+    const shares = h.lots * 1000;
+    if (h.addedDate === todayStr()) return (price - h.cost) * shares;
+    return (q?.change ?? 0) * shares;
+}
+function usDailyPnL(h, q) {
+    const price = q?.price ?? h.cost;
+    if (h.addedDate === todayStr()) return (price - h.cost) * h.shares;
+    return (q?.change ?? 0) * h.shares;
+}
+
 // ── Render Summary ────────────────────────────────────────────────────
 
 function renderSummary() {
@@ -1568,13 +1586,13 @@ function renderSummary() {
         const q = QUOTES[h.ticker];
         const s = h.lots * 1000;
         totalCostNTD += h.cost * s;
-        twDaily      += (q?.change ?? 0) * s;
+        twDaily      += twDailyPnL(h, q);
     });
     US_DATA.forEach(h => {
         if (h.excluded) return;
         const q = QUOTES[h.ticker];
         totalCostNTD += h.cost * h.shares * USD_TWD;
-        usDaily      += (q?.change ?? 0) * h.shares * USD_TWD;
+        usDaily      += usDailyPnL(h, q) * USD_TWD;
     });
     CORP_BONDS.forEach(b => {
         totalCostNTD += corpBondCostValue(b) * USD_TWD;
@@ -1915,7 +1933,7 @@ function buildTwRow(h, idx, totalNTD) {
     const cost    = h.account === 'corp'
         ? h.cost * shares                      // 公司戶：均成本已含手續費
         : h.cost * shares * (1 + feeRate);     // 個人戶：均成本加計買入手續費
-    const daily   = (q?.change ?? 0) * shares;
+    const daily   = twDailyPnL(h, q);
     const afterT  = twAfterTaxPnL(h, price);
     const wt      = totalNTD > 0 ? val / totalNTD * 100 : 0;
     const pnlPct  = cost > 0 ? afterT / cost * 100 : 0;
@@ -1956,7 +1974,7 @@ function buildTwRow(h, idx, totalNTD) {
                    title="每股均成本（不含手續費）">
         </td>
         <td>${q ? fmtP(q.price) : (fetchAttempted ? '<span class="neu">—</span>' : '<span class="shimmer"></span>')}</td>
-        <td class="${cc(q?.changePct)}">${q ? (q.changePct >= 9.95 ? '<span class="badge-limitup">漲停</span>' : fmt(q.changePct, 2) + '%') : '—'}</td>
+        <td class="${cc(q?.changePct)}">${q ? (q.changePct >= 9.95 ? '<span class="badge-limitup">漲停</span>' : `${fmt(q.change, 2)}<div class="tbl-sub">${fmt(q.changePct, 2)}%</div>`) : '—'}</td>
         <td class="${cc(daily)}">${q ? fmt(daily, 0, '$') : '—'}</td>
         <td>${wan(val)}</td>
         <td class="${cc(afterT)}">${q ? fmt(afterT, 0, '$') : '—'}</td>
@@ -1979,7 +1997,7 @@ function renderTwTable() {
         const shares = h.lots * 1000;
         totVal   += price * shares;
         totCost  += h.cost * shares;
-        totDaily += (q?.change ?? 0) * shares;
+        totDaily += twDailyPnL(h, q);
         rows     += buildTwRow(h, idx, totalNTD);
     });
 
@@ -2127,24 +2145,48 @@ function hideAddTwRow() {
     document.getElementById('tw-add-row')?.remove();
 }
 
-// 專用：只取股票名稱
-// GitHub Pages 無法直接打 TWSE（CORS），優先用 Yahoo Finance，再用 allorigins 代理
+// 專用：只取股票名稱（多重備援）
 async function fetchTwStockName(code) {
-    // 1. Yahoo Finance（天生支援 CORS，有 shortName）
-    for (const suffix of ['.TW', '.TWO']) {
+    const suffixes = ['.TW', '.TWO'];
+
+    // 1. Yahoo Finance v8/chart（較穩定，有 meta.shortName）
+    for (const s of suffixes) {
         try {
-            const q = await fetchQuote(code + suffix);
+            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(code + s)}?interval=1d&range=1d`;
+            const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
+            if (r.ok) {
+                const d = await r.json();
+                const name = d.chart?.result?.[0]?.meta?.shortName
+                          || d.chart?.result?.[0]?.meta?.longName;
+                if (name) return name;
+            }
+        } catch(_) {}
+    }
+
+    // 2. Yahoo Finance v1/search
+    try {
+        const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(code)}.TW&quotesCount=5&newsCount=0`;
+        const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
+        if (r.ok) {
+            const d = await r.json();
+            const hit = d.quotes?.find(q => q.symbol === code + '.TW' || q.symbol === code + '.TWO');
+            if (hit?.shortname || hit?.longname) return hit.shortname || hit.longname;
+        }
+    } catch(_) {}
+
+    // 3. Yahoo Finance v7/quote（原有邏輯）
+    for (const s of suffixes) {
+        try {
+            const q = await fetchQuote(code + s);
             if (q?.shortName) return q.shortName;
         } catch(_) {}
     }
-    // 2. allorigins 代理 TWSE（直接打 TWSE 在 GitHub Pages 被 CORS 擋）
-    const twseUrls = [
-        `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0`,
-        `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_${code}.tw&json=1&delay=0`,
-    ];
-    for (const url of twseUrls) {
+
+    // 4. allorigins 代理 TWSE
+    for (const ex of ['tse', 'otc']) {
         try {
-            const r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
+            const twseUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${ex}_${code}.tw&json=1&delay=0`;
+            const r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(twseUrl)}`, { signal: AbortSignal.timeout(8000) });
             if (r.ok) {
                 const d = await r.json();
                 const name = d.msgArray?.[0]?.n;
@@ -2198,7 +2240,7 @@ async function confirmAddTw() {
     const name = nameInput || q?.shortName || ticker;
     if (q) QUOTES[ticker] = q;
 
-    TW_DATA.push({ ticker, name, lots, cost });
+    TW_DATA.push({ ticker, name, lots, cost, addedDate: todayStr() });
     saveTwData();
     twAddVisible = false;
     doRefresh(true);
@@ -2210,7 +2252,7 @@ function buildUsRow(h, idx, totalNTD) {
     const q      = QUOTES[h.ticker];
     const price  = q?.price ?? h.cost;
     const val    = price * h.shares;
-    const daily  = (q?.change ?? 0) * h.shares;
+    const daily  = usDailyPnL(h, q);
     const unreal = (price - h.cost) * h.shares;
     const wt     = totalNTD > 0 ? val * USD_TWD / totalNTD * 100 : 0;
     const pnlPct = h.cost > 0 ? (price - h.cost) / h.cost * 100 : 0;
@@ -2268,7 +2310,7 @@ function renderUsTable() {
         const val    = price * h.shares;
         totValUSD  += val;
         totCostUSD += h.cost * h.shares;
-        totDayUSD  += (q?.change ?? 0) * h.shares;
+        totDayUSD  += usDailyPnL(h, q);
         totUnrUSD  += (price - h.cost) * h.shares;
         rows       += buildUsRow(h, idx, totalNTD);
     });
@@ -2367,7 +2409,7 @@ async function confirmAddUs() {
         name = ticker;
     }
 
-    US_DATA.push({ ticker, name, shares, cost });
+    US_DATA.push({ ticker, name, shares, cost, addedDate: todayStr() });
     saveUsData();
     usAddVisible = false;
     doRefresh(true);
