@@ -946,7 +946,7 @@ let prevSummaryVals = {};    // 上次 summary 數值，用於卡片閃爍
 
 // Fugle API Key（台股即時報價用）
 const FUGLE_KEY_STORAGE = 'fugle_api_key';
-const FUGLE_KEY_DEFAULT = 'OGRlNjdhYzYtNzVlNS00MWY0LWEyNmItMmE3ZDYyOWJmNGMxIDAyYmQwMmE4LTk0NTItNDZmNy04ZDg3LTNiYTE4ODUxZDU4Zg==';
+const FUGLE_KEY_DEFAULT = 'NDk0NGEyZTEtMGJiMy00MjM4LWI3M2YtNWUwNTcxZDM5OTU0IDc5Y2VmMTg3LWVjZDUtNGM2Ny1iOTBkLTMxN2E2ZmI2MDZkZQ==';
 let fugleApiKey = '';
 try { fugleApiKey = localStorage.getItem(FUGLE_KEY_STORAGE) || FUGLE_KEY_DEFAULT; } catch(_) { fugleApiKey = FUGLE_KEY_DEFAULT; }
 function saveFugleKey(key) { fugleApiKey = key.trim(); localStorage.setItem(FUGLE_KEY_STORAGE, fugleApiKey); if (typeof scheduleCloudSync === 'function') scheduleCloudSync(); }
@@ -1292,8 +1292,12 @@ function calcTotalNTD() {
 // ── Fugle 即時報價（台股，需 API Key）────────────────────────────────
 
 async function fetchFugleQuote(ticker) {
-    console.log('Fugle key:', fugleApiKey ? '有設定(長度' + fugleApiKey.length + ')' : '空白');
     if (!fugleApiKey) return null;
+    // HTTP header 只允許 ISO-8859-1，key 含非 ASCII 字元時直接略過
+    if (/[^\x00-\xFF]/.test(fugleApiKey)) {
+        console.warn('Fugle key 含非 ASCII 字元，已略過');
+        return null;
+    }
     const code = ticker.split('.')[0];
     try {
         const url = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/${code}`;
@@ -2123,20 +2127,45 @@ function hideAddTwRow() {
     document.getElementById('tw-add-row')?.remove();
 }
 
+// 專用：只取股票名稱
+// GitHub Pages 無法直接打 TWSE（CORS），優先用 Yahoo Finance，再用 allorigins 代理
+async function fetchTwStockName(code) {
+    // 1. Yahoo Finance（天生支援 CORS，有 shortName）
+    for (const suffix of ['.TW', '.TWO']) {
+        try {
+            const q = await fetchQuote(code + suffix);
+            if (q?.shortName) return q.shortName;
+        } catch(_) {}
+    }
+    // 2. allorigins 代理 TWSE（直接打 TWSE 在 GitHub Pages 被 CORS 擋）
+    const twseUrls = [
+        `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_${code}.tw&json=1&delay=0`,
+        `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_${code}.tw&json=1&delay=0`,
+    ];
+    for (const url of twseUrls) {
+        try {
+            const r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
+            if (r.ok) {
+                const d = await r.json();
+                const name = d.msgArray?.[0]?.n;
+                if (name) return name;
+            }
+        } catch(_) {}
+    }
+    return null;
+}
+
 // 輸入代號後自動查名稱並填入
 async function autoFillTwName(raw) {
     if (!raw.trim()) return;
     const nameEl = document.getElementById('tw-new-name');
     if (!nameEl || nameEl.value.trim()) return; // 已有輸入則不覆蓋
     nameEl.placeholder = '查詢中…';
-    const code = raw.trim().toUpperCase();
-    let ticker = code.includes('.') ? code : code + '.TW';
-    let q = await fetchTwQuote(ticker);
-    if (!q && !code.includes('.')) {
-        q = await fetchTwQuote(code + '.TWO');
-    }
-    if (q?.shortName) {
-        nameEl.value = q.shortName;
+    const code = raw.trim().toUpperCase().replace(/\.(TW|TWO)$/i, '');
+
+    const name = await fetchTwStockName(code);
+    if (name) {
+        nameEl.value = name;
         nameEl.placeholder = '名稱';
     } else {
         nameEl.placeholder = '請手動輸入名稱';
