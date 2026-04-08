@@ -946,18 +946,22 @@ let prevSummaryVals = {};    // 上次 summary 數值，用於卡片閃爍
 
 // Fugle API Key（台股即時報價用）
 const FUGLE_KEY_STORAGE = 'fugle_api_key';
-const FUGLE_KEY_DEFAULT = 'NDk0NGEyZTEtMGJiMy00MjM4LWI3M2YtNWUwNTcxZDM5OTU0IDc5Y2VmMTg3LWVjZDUtNGM2Ny1iOTBkLTMxN2E2ZmI2MDZkZQ==';
+// 預設 key 以 base64 儲存（輕度混淆），解碼後格式為「uuid1 uuid2」，只取第一個 uuid
+const FUGLE_KEY_DEFAULT_B64 = 'NDk0NGEyZTEtMGJiMy00MjM4LWI3M2YtNWUwNTcxZDM5OTU0IDc5Y2VmMTg3LWVjZDUtNGM2Ny1iOTBkLTMxN2E2ZmI2MDZkZQ==';
+function decodeFugleDefault() {
+    try { return atob(FUGLE_KEY_DEFAULT_B64).split(' ')[0]; } catch(_) { return ''; }
+}
 let fugleApiKey = '';
 try {
     const _stored = localStorage.getItem(FUGLE_KEY_STORAGE);
-    // 若 localStorage 存的 key 含非 ASCII（壞掉的舊 key），自動清除並用預設值
     if (_stored && /[^\x00-\xFF]/.test(_stored)) {
+        // 壞掉的舊 key → 清除，用解碼後的預設值
         localStorage.removeItem(FUGLE_KEY_STORAGE);
-        fugleApiKey = FUGLE_KEY_DEFAULT;
+        fugleApiKey = decodeFugleDefault();
     } else {
-        fugleApiKey = _stored || FUGLE_KEY_DEFAULT;
+        fugleApiKey = _stored || decodeFugleDefault();
     }
-} catch(_) { fugleApiKey = FUGLE_KEY_DEFAULT; }
+} catch(_) { fugleApiKey = decodeFugleDefault(); }
 function saveFugleKey(key) { fugleApiKey = key.trim(); localStorage.setItem(FUGLE_KEY_STORAGE, fugleApiKey); if (typeof scheduleCloudSync === 'function') scheduleCloudSync(); }
 function saveFugleKeyFromModal() {
     const v = document.getElementById('fugleKeyInput')?.value?.trim() || '';
