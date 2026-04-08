@@ -2130,9 +2130,9 @@ async function autoFillTwName(raw) {
     nameEl.placeholder = '查詢中…';
     const code = raw.trim().toUpperCase();
     let ticker = code.includes('.') ? code : code + '.TW';
-    let q = await fetchQuote(ticker);
+    let q = await fetchTwQuote(ticker);
     if (!q && !code.includes('.')) {
-        q = await fetchQuote(code + '.TWO');
+        q = await fetchTwQuote(code + '.TWO');
     }
     if (q?.shortName) {
         nameEl.value = q.shortName;
@@ -2157,11 +2157,11 @@ async function confirmAddTw() {
 
     // 自動補後綴：優先 .TW（上市），查不到再試 .TWO（上櫃）
     let ticker = raw.includes('.') ? raw : raw + '.TW';
-    let q = await fetchQuote(ticker);
+    let q = await fetchTwQuote(ticker);
     if (!q && !raw.includes('.')) {
         if (status) status.textContent = '上市查無，改試上櫃…';
         ticker = raw + '.TWO';
-        q = await fetchQuote(ticker);
+        q = await fetchTwQuote(ticker);
     }
 
     // 名稱優先順序：手動輸入 > Yahoo shortName > ticker
