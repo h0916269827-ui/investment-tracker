@@ -937,7 +937,8 @@ const CFG = {
 // ╚══════════════════════════════════════════════════════════════════════╝
 
 let QUOTES  = {};
-let USD_TWD = parseFloat(localStorage.getItem('usd_twd_last')) || CFG.usd_twd_fallback;
+const _storedRate = parseFloat(localStorage.getItem('usd_twd_last'));
+let USD_TWD = (_storedRate > 10 && _storedRate < 100) ? _storedRate : CFG.usd_twd_fallback;
 let loading = false;
 let hasError = false;
 let fetchAttempted = false;  // 至少嘗試過一次抓取
@@ -1092,9 +1093,10 @@ const TW_KEY = 'tw_holdings_v1';
 let TW_DATA = (() => {
     try {
         const s = localStorage.getItem(TW_KEY);
-        if (s) return JSON.parse(s);
+        const p = s ? JSON.parse(s) : null;
+        if (Array.isArray(p)) return p;
     } catch(_) {}
-    return JSON.parse(JSON.stringify(CFG.tw));  // deep copy of defaults
+    return JSON.parse(JSON.stringify(CFG.tw));
 })();
 function saveTwData() { localStorage.setItem(TW_KEY, JSON.stringify(TW_DATA)); scheduleCloudSync(); }
 
@@ -1103,7 +1105,8 @@ const US_KEY = 'us_holdings_v1';
 let US_DATA = (() => {
     try {
         const s = localStorage.getItem(US_KEY);
-        if (s) return JSON.parse(s);
+        const p = s ? JSON.parse(s) : null;
+        if (Array.isArray(p)) return p;
     } catch(_) {}
     return JSON.parse(JSON.stringify(CFG.us));
 })();
@@ -2126,6 +2129,7 @@ function toggleTwExclude(idx) {
 
 function deleteTwRow(idx) {
     if (!confirm(`確定刪除「${TW_DATA[idx].name || TW_DATA[idx].ticker}」？`)) return;
+    delete QUOTES[TW_DATA[idx].ticker];
     TW_DATA.splice(idx, 1);
     saveTwData();
     renderTwTable();
@@ -2352,6 +2356,7 @@ function toggleUsExclude(idx) {
 
 function deleteUsRow(idx) {
     if (!confirm(`確定刪除「${US_DATA[idx].name || US_DATA[idx].ticker}」？`)) return;
+    delete QUOTES[US_DATA[idx].ticker];
     US_DATA.splice(idx, 1);
     saveUsData();
     renderUsTable();
