@@ -1313,13 +1313,48 @@ function calcTotalNTD() {
 
 // ── Fugle 即時報價（台股，需 API Key）────────────────────────────────
 
+function _parseFugleQuote(d) {
+    const price = d.lastPrice ?? d.closePrice;
+    if (!price) return null;
+    const prev = d.previousClose ?? price;
+    const chg  = d.change ?? (price - prev);
+    return {
+        price,
+        prevClose  : prev,
+        change     : chg,
+        changePct  : prev ? chg / prev * 100 : 0,
+        currency   : 'TWD',
+        marketState: isTwMarketOpen() ? 'REGULAR' : 'CLOSED',
+        shortName  : d.name || null,
+    };
+}
+
+// 批次查詢所有台股（單次 API call），節省 Fugle 請求配額
+async function fetchFugleAll(tickers) {
+    if (!fugleApiKey || /[^\x00-\xFF]/.test(fugleApiKey)) return null;
+    const codes = tickers.map(t => t.split('.')[0]).join(',');
+    try {
+        const url = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/quotes?symbol=${codes}`;
+        const r   = await fetch(url, {
+            headers: { 'X-API-KEY': fugleApiKey },
+            signal : AbortSignal.timeout(10000),
+        });
+        if (!r.ok) { console.warn(`Fugle batch API ${r.status}`); return null; }
+        const data = await r.json();
+        // 批次回傳：{ "3231": { lastPrice, ... }, ... }
+        const result = {};
+        tickers.forEach(t => {
+            const code = t.split('.')[0];
+            const q = _parseFugleQuote(data[code] || {});
+            if (q) result[t] = q;
+        });
+        return Object.keys(result).length > 0 ? result : null;
+    } catch(e) { console.warn('Fugle batch error:', e.message); return null; }
+}
+
+// 單支股票備援（批次失敗時使用）
 async function fetchFugleQuote(ticker) {
-    if (!fugleApiKey) return null;
-    // HTTP header 只允許 ISO-8859-1，key 含非 ASCII 字元時直接略過
-    if (/[^\x00-\xFF]/.test(fugleApiKey)) {
-        console.warn('Fugle key 含非 ASCII 字元，已略過');
-        return null;
-    }
+    if (!fugleApiKey || /[^\x00-\xFF]/.test(fugleApiKey)) return null;
     const code = ticker.split('.')[0];
     try {
         const url = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/${code}`;
@@ -1329,20 +1364,7 @@ async function fetchFugleQuote(ticker) {
         });
         if (!r.ok) { console.warn(`Fugle API ${r.status}:`, await r.text().catch(()=>'')); return null; }
         const d = await r.json();
-        console.log('Fugle response:', JSON.stringify(d).slice(0, 300));
-        const price = d.lastPrice ?? d.closePrice;
-        if (!price) return null;
-        const prev  = d.previousClose ?? price;
-        const chg   = d.change ?? (price - prev);
-        return {
-            price,
-            prevClose  : prev,
-            change     : chg,
-            changePct  : prev ? chg / prev * 100 : 0,
-            currency   : 'TWD',
-            marketState: isTwMarketOpen() ? 'REGULAR' : 'CLOSED',
-            shortName  : d.name || null,
-        };
+        return _parseFugleQuote(d);
     } catch(e) { console.warn('Fugle fetch error:', e.message); return null; }
 }
 
@@ -1371,9 +1393,13 @@ async function fetchTwQuote(ticker) {
     const exCh  = (isOTC ? 'otc_' : 'tse_') + code + '.tw';
     const rtUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${exCh}&json=1&delay=0`;
 
-    // ── 1. TWSE 即時 API（直接 + allorigins 代理備援）────────────────
+    // ── 1. TWSE 即時 API（直接 + 兩條代理備援）──────────────────────
     let msg = null;
-    const rtUrls = [rtUrl, `https://api.allorigins.win/raw?url=${encodeURIComponent(rtUrl)}`];
+    const rtUrls = [
+        rtUrl,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(rtUrl)}`,
+        `https://corsproxy.io/?${encodeURIComponent(rtUrl)}`,
+    ];
     for (const url of rtUrls) {
         if (msg) break;
         try {
@@ -1548,12 +1574,32 @@ async function fetchAllQuotes() {
     const twTickers = TW_DATA.map(h => h.ticker);
     let err = 0;
 
-    // 台股 → TWSE 官方 API（優先），Yahoo Finance（備援）
-    const twResults = await Promise.allSettled(twTickers.map(t => fetchTwQuote(t)));
-    twResults.forEach((r, i) => {
-        if (r.status === 'fulfilled' && r.value) QUOTES[twTickers[i]] = r.value;
-        else err++;
-    });
+    // 台股 → 先嘗試 Fugle 批次（1 call），失敗再逐支 TWSE / Yahoo
+    let fugleBatch = null;
+    if (fugleApiKey && twTickers.length > 0) fugleBatch = await fetchFugleAll(twTickers);
+
+    if (fugleBatch) {
+        // 批次成功：寫入 QUOTES，未收到的股票再補抓
+        const missing = [];
+        twTickers.forEach(t => {
+            if (fugleBatch[t]) QUOTES[t] = fugleBatch[t];
+            else missing.push(t);
+        });
+        if (missing.length) {
+            const mis = await Promise.allSettled(missing.map(t => fetchTwQuote(t)));
+            mis.forEach((r, i) => {
+                if (r.status === 'fulfilled' && r.value) QUOTES[missing[i]] = r.value;
+                else err++;
+            });
+        }
+    } else {
+        // 批次失敗：逐支抓（原有邏輯）
+        const twResults = await Promise.allSettled(twTickers.map(t => fetchTwQuote(t)));
+        twResults.forEach((r, i) => {
+            if (r.status === 'fulfilled' && r.value) QUOTES[twTickers[i]] = r.value;
+            else err++;
+        });
+    }
 
     // 美股 + 匯率 → Twelve Data 批次（1 call），無 key 則分開用 Yahoo
     if (twelveApiKey) {
